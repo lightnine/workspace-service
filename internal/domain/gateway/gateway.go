@@ -32,8 +32,9 @@ type Session struct {
 
 // KernelRef references a kernel by id and/or kernelspec name in session bodies.
 type KernelRef struct {
-	ID   string `json:"id,omitempty"`
-	Name string `json:"name,omitempty"`
+	ID         string          `json:"id,omitempty"`
+	Name       string          `json:"name,omitempty"`
+	CustomEnvs json.RawMessage `json:"custom_envs,omitempty"`
 }
 
 // KernelSpec is a single kernelspec entry. Its nested spec is kept raw because
@@ -59,10 +60,11 @@ type CreateKernelRequest struct {
 
 // CreateSessionRequest is the body of POST /api/sessions.
 type CreateSessionRequest struct {
-	Path   string     `json:"path,omitempty"`
-	Name   string     `json:"name,omitempty"`
-	Type   string     `json:"type,omitempty"`
-	Kernel *KernelRef `json:"kernel,omitempty"`
+	Path    string     `json:"path,omitempty"`
+	Name    string     `json:"name,omitempty"`
+	Type    string     `json:"type,omitempty"`
+	Cluster string     `json:"cluster,omitempty"`
+	Kernel  *KernelRef `json:"kernel,omitempty"`
 }
 
 // UpdateSessionRequest is the body of PATCH /api/sessions/{id}. Pointer fields
@@ -101,9 +103,16 @@ type Client interface {
 	GetKernelSpecResource(ctx context.Context, resourcePath string) (KernelSpecResource, error)
 }
 
-// ChannelProxy bridges the kernel channels WebSocket to the gateway. WebSocket
-// streams cannot be meaningfully typed, so like jupyter_server they are proxied
-// frame-for-frame.
+// JupyterProxy forwards Jupyter-compatible HTTP and WebSocket traffic to the
+// configured execution backend (wedata-jupyter-server or Enterprise Gateway).
+// Extension routes (execute_task, spark stage, save_outputs, ...) are not
+// modelled as typed operations; they are relayed verbatim like jupyter_server.
+type JupyterProxy interface {
+	ProxyHTTP(w http.ResponseWriter, r *http.Request)
+	ProxyWebSocket(w http.ResponseWriter, r *http.Request)
+}
+
+// ChannelProxy is an alias for kernel channels WebSocket proxying.
 type ChannelProxy interface {
 	ProxyWebSocket(w http.ResponseWriter, r *http.Request)
 }
@@ -111,7 +120,7 @@ type ChannelProxy interface {
 // Gateway is the full port consumed by the HTTP adapter.
 type Gateway interface {
 	Client
-	ChannelProxy
+	JupyterProxy
 }
 
 // APIError carries a non-2xx response from the gateway so the adapter can relay

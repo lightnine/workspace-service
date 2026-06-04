@@ -23,6 +23,7 @@ func NewGatewayHandler(gateway domaingateway.Gateway) *GatewayHandler {
 // --- Sessions ---
 
 func (h *GatewayHandler) CreateSession(c *gin.Context) {
+	bindGatewayContext(c)
 	var req domaingateway.CreateSessionRequest
 	if !bindJSON(c, &req) {
 		return
@@ -42,6 +43,7 @@ func (h *GatewayHandler) GetSession(c *gin.Context) {
 }
 
 func (h *GatewayHandler) UpdateSession(c *gin.Context) {
+	bindGatewayContext(c)
 	var req domaingateway.UpdateSessionRequest
 	if !bindJSON(c, &req) {
 		return
@@ -51,6 +53,7 @@ func (h *GatewayHandler) UpdateSession(c *gin.Context) {
 }
 
 func (h *GatewayHandler) DeleteSession(c *gin.Context) {
+	bindGatewayContext(c)
 	err := h.gateway.DeleteSession(c.Request.Context(), c.Param("session_id"))
 	h.respondNoContent(c, err)
 }
@@ -119,7 +122,49 @@ func (h *GatewayHandler) GetKernelSpecResource(c *gin.Context) {
 // --- Kernel channels (WebSocket) ---
 
 func (h *GatewayHandler) Channels(c *gin.Context) {
+	bindGatewayContext(c)
 	h.gateway.ProxyWebSocket(c.Writer, c.Request)
+}
+
+// --- Jupyter execution extensions (HTTP + WebSocket proxy) ---
+
+func (h *GatewayHandler) ExecuteTaskWebSocket(c *gin.Context) {
+	h.gateway.ProxyWebSocket(c.Writer, c.Request)
+}
+
+func (h *GatewayHandler) SaveExecutionOutputs(c *gin.Context) {
+	h.gateway.ProxyHTTP(c.Writer, c.Request)
+}
+
+func (h *GatewayHandler) SparkAppStage(c *gin.Context) {
+	h.gateway.ProxyHTTP(c.Writer, c.Request)
+}
+
+func (h *GatewayHandler) SparkAppStatus(c *gin.Context) {
+	h.gateway.ProxyHTTP(c.Writer, c.Request)
+}
+
+func (h *GatewayHandler) DeleteSparkApp(c *gin.Context) {
+	h.gateway.ProxyHTTP(c.Writer, c.Request)
+}
+
+// DeleteSparkSessions proxies the legacy web-ide path to wedata-jupyter-server.
+func (h *GatewayHandler) DeleteSparkSessions(c *gin.Context) {
+	h.proxyHTTPWithBackendPath(c, "/api/sessions/spark-app")
+}
+
+func (h *GatewayHandler) ListPythonPackages(c *gin.Context) {
+	h.gateway.ProxyHTTP(c.Writer, c.Request)
+}
+
+func (h *GatewayHandler) WritePythonPackageRequirements(c *gin.Context) {
+	h.gateway.ProxyHTTP(c.Writer, c.Request)
+}
+
+func (h *GatewayHandler) proxyHTTPWithBackendPath(c *gin.Context, backendPath string) {
+	req := c.Request.Clone(c.Request.Context())
+	req.URL.Path = backendPath
+	h.gateway.ProxyHTTP(c.Writer, req)
 }
 
 // --- helpers ---

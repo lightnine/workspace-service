@@ -98,6 +98,16 @@ func registerGatewayRoutes(engine *gin.Engine, h *apphandler.GatewayHandler) {
 	engine.POST("/api/kernels/:kernel_id/restart", h.RestartKernel)
 	engine.GET("/api/kernels/:kernel_id/channels", h.Channels)
 
+	// wedata-jupyter-server execution surface (proxied when gateway.url targets it)
+	engine.GET("/api/kernels/execute_task/ws", h.ExecuteTaskWebSocket)
+	engine.POST("/api/kernels/execute_task/save_outputs", h.SaveExecutionOutputs)
+	engine.GET("/api/sessions/spark-app/stage", h.SparkAppStage)
+	engine.GET("/api/spark-app/status", h.SparkAppStatus)
+	engine.DELETE("/api/sessions/spark-app", h.DeleteSparkApp)
+	engine.DELETE("/api/spark-sessions", h.DeleteSparkSessions)
+	engine.GET("/api/sessions/python-packages", h.ListPythonPackages)
+	engine.POST("/api/sessions/python-packages/requirements", h.WritePythonPackageRequirements)
+
 	engine.GET("/api/kernelspecs", h.ListKernelSpecs)
 	engine.GET("/api/kernelspecs/:name", h.GetKernelSpec)
 	engine.GET("/kernelspecs/*resource", h.GetKernelSpecResource)

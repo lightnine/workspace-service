@@ -65,6 +65,14 @@ func main() {
 	}
 	gitHandler := apphandler.NewGitHandler(gitService)
 
+	sessionStore, err := inframysql.NewOptionalKernelSessionStore(cfg.MySQL)
+	if err != nil {
+		log.Fatal("init kernel session store failed", zap.Error(err))
+	}
+	if sessionStore == nil {
+		log.Warn("mysql dsn is empty, kernel_session recording is disabled")
+	}
+
 	gatewayClient, err := infragateway.NewOptionalGateway(cfg.Gateway, log)
 	if err != nil {
 		log.Fatal("init gateway client failed", zap.Error(err))
@@ -73,6 +81,7 @@ func main() {
 	if gatewayClient == nil {
 		log.Warn("gateway url is empty, jupyter gateway proxy is disabled")
 	} else {
+		gatewayClient = infragateway.WrapWithSessionStore(gatewayClient, sessionStore, log)
 		gatewayHandler = apphandler.NewGatewayHandler(gatewayClient)
 	}
 

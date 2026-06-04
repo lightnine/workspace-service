@@ -178,7 +178,7 @@ flowchart TB
 
 | 交互                         | 说明                                                                  |
 | -------------------------- | ------------------------------------------------------------------- |
-| 前端 → Workspace Server      | 文件树、文件内容、Notebook 编辑、Kernel 创建、WebSocket 执行统一进入同一个 Workspace Server |
+| 前端 → Workspace Server      | 文件树、文件内容、Notebook 编辑、Kernel 创建、WebSocket 执行统一进入**同一套** Workspace Server 服务（多副本时见 §5.3，非单 Pod） |
 | Workspace Server → JuiceFS | Workspace Server 挂载共享 JuiceFS，按 `tenantId/workspaceId` 路径读写文件       |
 | Workspace Server → DLC     | 查询引擎信息、生成 Kernel 参数、创建 Kernel、代理 WebSocket                          |
 | DLC Kernel → JuiceFS       | Kernel Pod 挂载同一个共享 JuiceFS，挂载到当前登录用户路径，读写 Notebook、依赖与运行产物          |
@@ -515,6 +515,8 @@ sequenceDiagram
     WS-->>FE: Jupyter SessionModel
 ```
 
+持久化表：`sql/002_create_kernel_session.sql` 中的 **`kernel_session`**（对齐 wedata-jupyter-server SQLite `session`，并增加 `app_id` / `workspace_id` / `owner_uin` / `uin`）。**不记录 WebSocket 连接**；在 `POST /api/sessions` 成功、`DELETE /api/sessions` 成功时由 `PersistingGateway` 写入/软删。租户身份来自 `X-Wedata-*` 请求头（见 `bindGatewayContext`）。
+
 
 
 ### 5.2 WebSocket 代理流程
@@ -533,6 +535,178 @@ sequenceDiagram
     EG-->>WS: iopub / shell messages
     WS-->>FE: forward (并捕获输出)
 ```
+
+
+
+### 5.3 多副本部署、实例重启与 WebSocket
+
+#### 5.3.1 设计前提
+
+Workspace Server 对 WebSocket 的实现是**无状态透明代理**（`internal/infra/gateway/websocket_proxy.go`）：在**单个进程内**维护「浏览器 ↔ 本 Pod」与「本 Pod ↔ gateway（DLC EG / wedata-jupyter-server）」两条长连接，双向 `pump` 转发帧；**不在** Workspace Server 内保存 kernel 执行状态、RPC 任务表或 session 快照。
+
+因此：
+
+- **多副本**：新建连接可由任意 Pod 接受；已建立的连接在 TCP 层自然绑定到接受 upgrade 的那台 Pod，直到断开。
+- **不要求**对 Workspace Server 做 Ingress Session Affinity（cookie / ip hash）；负载均衡按连接分发即可。
+- **计算与任务状态**在下游（EG Kernel Pod、wedata-jupyter-server 内存 / SQLite、JuiceFS 持久化输出等），不在 Workspace Server Pod 内。
+
+#### 5.3.2 实例重启 / 滚动发布时会发生什么
+
+| 事件 | 行为 |
+| ---- | ---- |
+| Pod 被 SIGTERM（滚动升级、缩容、节点驱逐） | `cmd/server` 调用 `http.Server.Shutdown`（默认 `server.shutdown_timeout: 10s`），停止接受新连接，尝试在超时内结束进行中的 HTTP；**长连 WebSocket 通常无法在 10s 内自然结束**，超时后进程退出，该 Pod 上所有 WS 双端连接被强制断开。 |
+| Pod 崩溃 / OOM / 强杀 | 无优雅收尾，该 Pod 上所有 WS 立即断开。 |
+| 其他 Pod | 不受影响，可继续接受新 HTTP / 新 WS。 |
+| DLC Kernel / Spark driver | 默认**不**因 Workspace Server 重启而自动销毁；是否仍可用取决于 EG / session 是否仍有效。 |
+| wedata-jupyter-server（`execute_task/ws`） | 任务状态在 jupyter-server 进程内；上游 WS 断开后需按产品逻辑由前端重连并恢复（`submit` / `deltas` / 磁盘 delta）。 |
+
+**当前未实现**：跨 Pod 的 WS 迁移、断点续传、服务端主动把连接 handoff 到另一副本。
+
+#### 5.3.3 推荐技术处理（分层）
+
+**1）客户端（必须）**
+
+- Notebook：`/api/kernels/{kernelId}/channels` — 监听 `close` / `error`，在 kernel 仍为 `busy` / `idle` 时**自动重连** channels（Jupyter 前端惯例）；重连后命中**任意** Workspace Server 副本即可。
+- Python 编辑器：`/api/kernels/execute_task/ws` — 断线后重新建立 WS；若 RPC 上下文丢失，重新 `submit` 或拉 `deltas` / 读已持久化输出。
+- 发布 / 重启窗口：对用户提示「连接中断，正在重连」；避免在断线期间仅依赖内存中的执行状态。
+
+**2）Workspace Server 进程（建议运维调参）**
+
+- 滚动发布前依赖 K8s `preStop` + 短 sleep，配合调大 `server.shutdown_timeout`（例如 30s～120s），让存量 WS 有更多时间被客户端主动关掉，减少强断。
+- 监控：`websocket_active_connections`（需自行在网关或应用侧打点）、goroutine 数、打开 FD 数。
+- **不要**在 Workspace Server 层做有状态亲和，除非未来在 WS 进程内引入会话注册表（当前无此设计）。
+
+**3）Ingress / API Gateway（必须）**
+
+- 开启 WebSocket Upgrade，代理超时大于最长单次执行（Notebook / Python 可能数十分钟）。
+- `proxy_read_timeout` / `idle_timeout` 与产品最长执行时间对齐，避免中途被网关静默断连。
+- 健康检查只打 HTTP（如 `/healthz`），不要用会占满 WS 配额的长连接探活。
+
+**4）gateway 后端（按部署形态）**
+
+- **单实例 EG 或单实例 wedata-jupyter-server**：Workspace Server 多副本 + 无亲和即可；每条 WS 由某一 Pod 新建到同一 `gateway.url`。
+- **多副本 wedata-jupyter-server**：`execute_task` 等含进程内状态，除 WS 外 HTTP 也可能粘在某个 jupyter 实例上 — 需在 **gateway 入口** 做会话亲和，或将任务状态外置到 Redis / DB（演进项）。
+
+```mermaid
+sequenceDiagram
+    participant FE as Frontend
+    participant LB as Ingress/LB
+    participant WS1 as Workspace Server Pod A
+    participant WS2 as Workspace Server Pod B
+    participant EG as Gateway Backend
+
+    FE->>LB: WS upgrade
+    LB->>WS1: 新连接落到 Pod A
+    WS1->>EG: 建立上游 WS
+    Note over WS1: Pod A 重启或 SIGTERM
+    WS1--xFE: 浏览器 WS 断开
+    WS1--xEG: 上游 WS 断开
+    FE->>LB: 客户端重连
+    LB->>WS2: 可落到任意存活 Pod
+    WS2->>EG: 新建上游 WS（kernel 仍存活则可继续）
+```
+
+#### 5.3.4 前端重连后，Workspace Server 如何再连 gateway？
+
+**结论：没有“恢复旧连接”，而是前端每发起一次新的 WebSocket Upgrade，当前处理该请求的 Pod 都会重新向 gateway 发起一次全新的 `websocket.Dial`。**
+
+Workspace Server **不维护**到 gateway 的长连接池，也**不保存**“浏览器连接 ↔ gateway 连接”的映射表；一对桥接连接只存在于**单次** `ProxyWebSocket` 调用生命周期内（进程内两个 `pumpWS` goroutine，函数返回即双端关闭）。
+
+前端重连时的步骤（与首次连接相同）：
+
+```text
+1. 浏览器 → Ingress/LB → 某一存活 Pod：HTTP GET + Upgrade
+   例：ws://workspace/api/kernels/{kernelId}/channels?session_id=...
+
+2. 该 Pod 执行 ProxyWebSocket（gateway/websocket_proxy.go）：
+   a. 用配置 gateway.ws_url（空则从 gateway.url 推导 ws/wss）拼目标 URL
+      target = ws_url + 与客户端相同的 Path + RawQuery
+   b. 先 websocket.Dial → gateway（带 gateway.auth_token 等头）
+   c. 再 websocket.Accept ← 浏览器
+   d. 双向 pump 转发帧，直到任一端关闭
+
+3. 旧 Pod 重启前的那条 Dial 已随进程退出而消失，与新连接无关
+```
+
+与配置的关系：`gateway.url` / `gateway.ws_url` 是**进程级静态配置**，任意副本、任意次重连都拨向同一 gateway 入口（或由 K8s Service 负载到 EG 多副本）。**能否继续执行**取决于 gateway 侧资源是否仍在，而不是 Workspace Server 能否“找回”旧 WS：
+
+| 路径 | 重连 URL 中关键信息 | gateway 侧通常要求 |
+| ---- | ------------------- | ------------------ |
+| `/api/kernels/{kernelId}/channels` | 同一 `kernelId`（及 session 相关 query） | EG 上该 kernel 进程仍存活 |
+| `/api/kernels/execute_task/ws` | 与首次相同的 path/query | wedata-jupyter-server 接受新 WS；进程内任务表可能需前端重新 `submit` |
+
+因此：**实例重启只打断“当时那两条 TCP”**；前端重连后，由**新 Pod 在 handler 里重新 Dial gateway**，逻辑上与用户第一次打开 Notebook 时建连无异。
+
+#### 5.3.5 与旧「每用户 Pod + jupyter-server」的差异
+
+旧架构 WS 断在**用户专属** jupyter-server Pod 上，重启该 Pod 等价于用户环境重启。新架构 WS 断在**共享无状态代理层**，文件与 kernel 仍在共享存储 / EG 上；恢复重点是**客户端重连 + 下游 session/kernel 仍有效**，而非恢复 Workspace Server 内存。
+
+
+
+### 5.4 WebSocket 连接容量与上限
+
+#### 5.4.1 代码与配置现状（无硬上限）
+
+当前 `workspace-service` **未实现**应用层「最大 WebSocket 连接数」限流或拒绝策略：
+
+| 项 | 现状 |
+| -- | ---- |
+| `http.Server` | 仅配置 `ReadHeaderTimeout: 10s`，**未**设置 `MaxConns` / 每路由连接池上限 |
+| WebSocket 库 | `github.com/coder/websocket`，单条代理连接 `wsReadLimit = -1`（不限制单帧大小，大输出由下游与内存约束） |
+| 每条活跃 WS | 约 **2 个 TCP 连接**（客户端 + gateway）+ **2 个** `pumpWS` goroutine（双向转发） |
+| 配置文件 | `conf/workspace-service.yaml` 无 `max_websocket_connections` 类字段 |
+
+因此文档中的「最多多少连接」**不是固定常数**，由部署环境的 FD、内存、CPU 与下游 gateway 能力共同决定。
+
+#### 5.4.2 单 Pod 容量估算（规划用）
+
+可用于容量评审的粗算（**需压测校准**）：
+
+```text
+单 Pod 并发 WS 上限 ≈ min(
+  (ulimit nofile − 预留 FD) / 2,     # 每条 WS 约 2 个 socket
+  (可用内存 − 基线) / 每连接内存开销,   # 含 goroutine、读缓冲、瞬时大消息
+  下游 gateway 对该入口的并发 WS 配额
+)
+```
+
+经验量级（仅作初始 HPA / 资源申请参考，**非 SLA**）：
+
+| 场景 | 单 Pod 建议规划并发 WS（软目标） | 说明 |
+| ---- | -------------------------------- | ---- |
+| 开发 / 联调（默认资源） | 50～200 | 少量开发者同时开 Notebook + Python WS |
+| 生产（2C4G、nofile≥65535） | 200～800 | 需配合监控与压测；超过宜水平扩容副本而非单 Pod 堆连接 |
+| 生产（提高 limits + 压测验证） | 以压测为准 | 在目标消息大小（iopub 大输出）下测 P99 延迟与 OOM 阈值 |
+
+**每用户可能占用多条 WS**（同时打开时累加）：
+
+| 路径 | 用途 |
+| ---- | ---- |
+| `GET /api/kernels/{kernelId}/channels` | Notebook 单元执行 |
+| `GET /api/kernels/execute_task/ws` | Python 文件 RPC |
+
+示例：100 个活跃用户同时编辑 Notebook 且各开 1 个 Python WS → 约 **200** 条穿透 Workspace Server 的 WS；3 副本时平均每 Pod ~67 条，仍须按峰值用户与多标签页放大。
+
+#### 5.4.3 集群总容量
+
+```text
+集群最大并发 WS ≈ Σ(各 Pod 实际存活连接数)
+                ≤ 副本数 × 单 Pod 压测得出的安全并发
+```
+
+水平扩容**线性增加**可承载的 WS 条数（每条连接仍只占用一个 Pod）；重启某一副本只损失该副本上的连接，不降低集群理论上限。
+
+#### 5.4.4 运维与后续增强（可选）
+
+| 手段 | 作用 |
+| ---- | ---- |
+| K8s `resources.limits` + `ulimit` / `securityContext` | 防止单 Pod FD 或内存打满拖垮节点 |
+| HPA 基于 CPU、内存或自定义指标（活跃 WS 数） | 连接上涨时扩容副本 |
+| Ingress `limit_conn` / 全局限流 | 集群级保护（在网关层而非应用内） |
+| 应用内 `semaphore` + 503（未实现） | 超限拒绝新 WS upgrade，保护存量连接 |
+| 指标：`ws_proxy_active_total`、`ws_proxy_dial_errors` | 容量与故障告警 |
+
+若产品需要明确「单实例最多 N 条 WS」，应在配置中增加 `server.max_websocket_connections` 并在 `ProxyWebSocket` 入口 acquire/release（**当前版本未做**，上表为演进建议）。
 
 
 

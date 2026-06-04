@@ -8,6 +8,7 @@ MySQL 需有 `file_node` 表：
 
 ```bash
 mysql -u root -p workspace < sql/001_create_file_node.sql
+mysql -u root -p workspace < sql/002_create_kernel_session.sql
 ```
 
 若库中是更早期的表（缺少 `app_id` / `workspace_id`），需自行 `ALTER TABLE` 补齐这两列及 `idx_file_node_app_workspace` 索引。
@@ -106,6 +107,23 @@ go run ./cmd/server -config conf/workspace-service.yaml
 ```bash
 ./scripts/local-smoke-test.sh
 ```
+
+## 6. Python 执行 / Spark / 包管理（代理）
+
+以下路由由 workspace-service **原样转发**到 `gateway.url` 对应的后端（需 **wedata-jupyter-server**，不是裸 Kernel Gateway）：
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/kernels/execute_task/ws` | Python RPC WebSocket |
+| `POST` | `/api/kernels/execute_task/save_outputs` | 保存执行输出 |
+| `GET` | `/api/sessions/spark-app/stage` | Spark 启动阶段（需 `cluster` 头） |
+| `GET` | `/api/spark-app/status` | Spark 状态 |
+| `DELETE` | `/api/sessions/spark-app` | 释放 Spark Session |
+| `DELETE` | `/api/spark-sessions` | web-ide 兼容路径，转发到 `/api/sessions/spark-app` |
+| `GET` | `/api/sessions/python-packages` | 已安装 Python 包 |
+| `POST` | `/api/sessions/python-packages/requirements` | 写入 requirements |
+
+本地若只起了 JKG（`:8888`），上述接口会 **404/502**；联调 Python 编辑器时请把 `gateway.url` / `gateway.ws_url` 指向 wedata-jupyter-server 实例。
 
 ## 已知现象
 

@@ -68,6 +68,7 @@ func (f *fakeGateway) GetKernelSpecResource(context.Context, string) (domaingate
 	return domaingateway.KernelSpecResource{ContentType: "image/png", Data: []byte("png")}, f.err
 }
 func (f *fakeGateway) ProxyWebSocket(http.ResponseWriter, *http.Request) {}
+func (f *fakeGateway) ProxyHTTP(http.ResponseWriter, *http.Request)     {}
 
 func newGatewayTestRouter(gw domaingateway.Gateway) *gin.Engine {
 	gin.SetMode(gin.TestMode)
