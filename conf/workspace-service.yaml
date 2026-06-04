@@ -1,0 +1,39 @@
+server:
+  name: workspace-service
+  address: ":8080"
+  mode: release
+  url_prefix: ""
+  shutdown_timeout: 10s
+
+workspace:
+  mount_root: "~/mnt/studio"
+
+log:
+  level: info
+  encoding: json
+  development: false
+  output_paths:
+    - stdout
+
+mysql:
+  dsn: "root:leondli123@tcp(127.0.0.1:3306)/workspace?charset=utf8mb4&parseTime=True&loc=Local"
+  max_open_conns: 20
+  max_idle_conns: 10
+  conn_max_lifetime: 30m
+
+# gateway is a transparent reverse proxy to a remote Jupyter Gateway /
+# Enterprise Gateway. Leave url empty to disable (proxy routes are not mounted).
+gateway:
+  url: ""
+  ws_url: ""
+  auth_header_key: "Authorization"
+  auth_scheme: "token"
+  auth_token: ""
+  headers: {}
+  connect_timeout: 40s
+  request_timeout: 42s
+  max_request_retries: 2
+  validate_cert: true
+  ca_certs: ""
+  client_cert: ""
+  client_key: ""
