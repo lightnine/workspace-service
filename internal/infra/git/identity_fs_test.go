@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	domainfile "git.woa.com/leondli/workspace-service/internal/domain/file"
-	domaingit "git.woa.com/leondli/workspace-service/internal/domain/git"
+	"git.woa.com/leondli/workspace-service/internal/testutil"
 	"github.com/go-git/go-billy/v5/osfs"
 )
 
@@ -26,15 +26,16 @@ func (s *fakeFileNodeStore) MarkDeleted(ctx context.Context, mutation domainfile
 	return nil
 }
 
+func (s *fakeFileNodeStore) LookupByInodeIDs(context.Context, []uint64) (map[uint64]domainfile.NodeRecord, error) {
+	return map[uint64]domainfile.NodeRecord{}, nil
+}
+
 func TestIdentityFSRecordsCreatedFileNode(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	store := &fakeFileNodeStore{}
-	fs := newIdentityFS(context.Background(), osfs.New(root), domaingit.Actor{
-		OwnerUIN: "100001",
-		UIN:      "200001",
-	}, store)
+	fs := newIdentityFS(context.Background(), osfs.New(root), testutil.RequestContext(), store)
 
 	f, err := fs.Create("repo.txt")
 	if err != nil {
@@ -54,8 +55,9 @@ func TestIdentityFSRecordsCreatedFileNode(t *testing.T) {
 	if got.InodeID == 0 {
 		t.Fatal("inode id is zero")
 	}
-	if got.Actor.OwnerUIN != "100001" || got.Actor.UIN != "200001" {
-		t.Fatalf("actor = %+v", got.Actor)
+	want := testutil.RequestContext()
+	if got.Actor != domainfile.NewNodeActor(want.OwnerUIN, want.UIN, want.AppID, want.WorkspaceID) {
+		t.Fatalf("actor = %+v, want scope from test context", got.Actor)
 	}
 }
 
@@ -68,10 +70,7 @@ func TestIdentityFSMarksDeletedFileNode(t *testing.T) {
 	}
 
 	store := &fakeFileNodeStore{}
-	fs := newIdentityFS(context.Background(), osfs.New(root), domaingit.Actor{
-		OwnerUIN: "100001",
-		UIN:      "200001",
-	}, store)
+	fs := newIdentityFS(context.Background(), osfs.New(root), testutil.RequestContext(), store)
 
 	if err := fs.Remove("old.txt"); err != nil {
 		t.Fatalf("remove: %v", err)

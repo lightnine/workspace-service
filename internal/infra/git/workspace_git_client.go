@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
+	"strings"
 
 	domainfile "git.woa.com/leondli/workspace-service/internal/domain/file"
 	domaingit "git.woa.com/leondli/workspace-service/internal/domain/git"
@@ -18,10 +18,20 @@ import (
 
 type WorkspaceGitClient struct {
 	fileNodeStore domainfile.NodeStore
+	mountRoot     string
+	gitMetaRoot   string
 }
 
-func NewWorkspaceGitClient(fileNodeStore domainfile.NodeStore) *WorkspaceGitClient {
-	return &WorkspaceGitClient{fileNodeStore: fileNodeStore}
+func NewWorkspaceGitClient(fileNodeStore domainfile.NodeStore, mountRoot, gitMetaRoot string) *WorkspaceGitClient {
+	return &WorkspaceGitClient{
+		fileNodeStore: fileNodeStore,
+		mountRoot:     mountRoot,
+		gitMetaRoot:   gitMetaRoot,
+	}
+}
+
+func (c *WorkspaceGitClient) gitDir(worktreePath string) (string, error) {
+	return resolveGitDir(c.mountRoot, c.gitMetaRoot, worktreePath)
 }
 
 func (c *WorkspaceGitClient) Clone(ctx context.Context, req domaingit.CloneReq) (domaingit.CloneResult, error) {
@@ -29,16 +39,28 @@ func (c *WorkspaceGitClient) Clone(ctx context.Context, req domaingit.CloneReq) 
 		return domaingit.CloneResult{}, err
 	}
 
-	options := &gogit.CloneOptions{
-		URL: req.RepoURL,
+	branch := normalizeBranchName(req.Branch)
+	if branch == "" {
+		return domaingit.CloneResult{}, fmt.Errorf("branch is required")
 	}
-	if req.Branch != "" {
-		options.ReferenceName = plumbing.NewBranchReferenceName(req.Branch)
-		options.SingleBranch = true
+
+	gitDir, err := c.gitDir(req.TargetPath)
+	if err != nil {
+		return domaingit.CloneResult{}, err
+	}
+	if err := ensureGitDirParent(gitDir); err != nil {
+		return domaingit.CloneResult{}, err
+	}
+
+	options := &gogit.CloneOptions{
+		URL:           req.RepoURL,
+		ReferenceName: plumbing.NewBranchReferenceName(branch),
+		SingleBranch:  true,
+		Tags:          gogit.NoTags,
 	}
 
 	gitStorage := filesystem.NewStorage(
-		osfs.New(filepath.Join(req.TargetPath, ".git")),
+		osfs.New(gitDir),
 		cache.NewObjectLRUDefault(),
 	)
 	worktree := newIdentityFS(
@@ -55,7 +77,14 @@ func (c *WorkspaceGitClient) Clone(ctx context.Context, req domaingit.CloneReq) 
 	return domaingit.CloneResult{
 		RepoURL: req.RepoURL,
 		Path:    req.TargetPath,
+		Branch:  branch,
 	}, nil
+}
+
+func normalizeBranchName(branch string) string {
+	branch = strings.TrimSpace(branch)
+	branch = strings.TrimPrefix(branch, "refs/heads/")
+	return branch
 }
 
 func prepareCloneTarget(path string) error {

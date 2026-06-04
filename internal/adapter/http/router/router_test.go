@@ -23,6 +23,48 @@ func (f *fakeGitCommandService) CloneRepository(ctx context.Context, req usecase
 	}, nil
 }
 
+func (f *fakeGitCommandService) CreateGitFolder(context.Context, usecasegit.CreateGitFolderReq) (usecasegit.CreateGitFolderResp, error) {
+	return usecasegit.CreateGitFolderResp{}, nil
+}
+func (f *fakeGitCommandService) GetGitFolderStatus(context.Context, usecasegit.GetGitFolderStatusReq) (usecasegit.GetGitFolderStatusResp, error) {
+	return usecasegit.GetGitFolderStatusResp{}, nil
+}
+func (f *fakeGitCommandService) PullRepository(context.Context, usecasegit.PullRepositoryReq) (usecasegit.PullRepositoryResp, error) {
+	return usecasegit.PullRepositoryResp{}, nil
+}
+func (f *fakeGitCommandService) Commit(context.Context, usecasegit.CommitReq) (usecasegit.CommitResp, error) {
+	return usecasegit.CommitResp{}, nil
+}
+func (f *fakeGitCommandService) PushRepository(context.Context, usecasegit.PushRepositoryReq) (usecasegit.PushRepositoryResp, error) {
+	return usecasegit.PushRepositoryResp{}, nil
+}
+func (f *fakeGitCommandService) StageFiles(context.Context, usecasegit.StageFilesReq) error { return nil }
+func (f *fakeGitCommandService) UnstageFiles(context.Context, usecasegit.UnstageFilesReq) error { return nil }
+func (f *fakeGitCommandService) CommitAndPush(context.Context, usecasegit.CommitAndPushReq) (usecasegit.CommitAndPushResp, error) {
+	return usecasegit.CommitAndPushResp{}, nil
+}
+func (f *fakeGitCommandService) CreateBranch(context.Context, usecasegit.CreateBranchReq) (usecasegit.BranchResp, error) {
+	return usecasegit.BranchResp{}, nil
+}
+func (f *fakeGitCommandService) CheckoutBranch(context.Context, usecasegit.CheckoutBranchReq) (usecasegit.BranchResp, error) {
+	return usecasegit.BranchResp{}, nil
+}
+func (f *fakeGitCommandService) ListBranches(context.Context, usecasegit.ListBranchesReq) (usecasegit.ListBranchesResp, error) {
+	return usecasegit.ListBranchesResp{}, nil
+}
+func (f *fakeGitCommandService) GetStatus(context.Context, usecasegit.StatusReq) (usecasegit.StatusResp, error) {
+	return usecasegit.StatusResp{}, nil
+}
+func (f *fakeGitCommandService) GetCommitHistory(context.Context, usecasegit.CommitHistoryReq) (usecasegit.CommitHistoryResp, error) {
+	return usecasegit.CommitHistoryResp{}, nil
+}
+func (f *fakeGitCommandService) DiscardChanges(context.Context, usecasegit.DiscardChangesReq) error {
+	return nil
+}
+func (f *fakeGitCommandService) DeleteRepository(context.Context, usecasegit.DeleteRepositoryReq) error {
+	return nil
+}
+
 func TestNewRegistersHealthRoutes(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
@@ -55,14 +97,19 @@ func TestNewWithHandlersRegistersCloneRepoWithEmptyPrefix(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
-	engine := NewWithHandlers(zap.NewNop(), "", apphandler.NewGitHandler(&fakeGitCommandService{}), nil)
+	engine := NewWithHandlers(zap.NewNop(), "", &Handlers{
+		Git: apphandler.NewGitHandler(&fakeGitCommandService{}),
+	})
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/CloneRepo", strings.NewReader(`{
 		"owner_uin": "100001",
 		"uin": "200001",
+		"app_id": "260073493",
+		"workspace_id": "ws-test",
 		"repo_url": "https://example.com/repo.git",
-		"target_path": "users/200001/repo"
+		"target_path": "repo",
+		"branch": "main"
 	}`))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -77,14 +124,19 @@ func TestNewWithHandlersRegistersCloneRepoWithPrefix(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
-	engine := NewWithHandlers(zap.NewNop(), "/api", apphandler.NewGitHandler(&fakeGitCommandService{}), nil)
+	engine := NewWithHandlers(zap.NewNop(), "/api", &Handlers{
+		Git: apphandler.NewGitHandler(&fakeGitCommandService{}),
+	})
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/CloneRepo", strings.NewReader(`{
 		"owner_uin": "100001",
 		"uin": "200001",
+		"app_id": "260073493",
+		"workspace_id": "ws-test",
 		"repo_url": "https://example.com/repo.git",
-		"target_path": "users/200001/repo"
+		"target_path": "repo",
+		"branch": "main"
 	}`))
 	req.Header.Set("Content-Type", "application/json")
 

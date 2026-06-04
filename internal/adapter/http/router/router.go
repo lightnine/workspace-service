@@ -9,11 +9,14 @@ import (
 	"go.uber.org/zap"
 )
 
+// New builds a Gin engine with health routes only. Prefer NewWithHandlers for production.
 func New(log *zap.Logger) *gin.Engine {
-	return NewWithHandlers(log, "", nil, nil)
+	return NewWithHandlers(log, "", nil)
 }
 
-func NewWithHandlers(log *zap.Logger, urlPrefix string, gitHandler *apphandler.GitHandler, gatewayHandler *apphandler.GatewayHandler) *gin.Engine {
+// NewWithHandlers registers routes for the given handler bundle. Pass nil to skip
+// optional feature routes (e.g. gateway disabled).
+func NewWithHandlers(log *zap.Logger, urlPrefix string, handlers *Handlers) *gin.Engine {
 	engine := gin.New()
 	engine.Use(appmiddleware.RequestID())
 	engine.Use(appmiddleware.Recovery(log))
@@ -22,15 +25,59 @@ func NewWithHandlers(log *zap.Logger, urlPrefix string, gitHandler *apphandler.G
 	engine.GET("/healthz", healthHandler.Healthz)
 	engine.GET("/readyz", healthHandler.Readyz)
 
-	if gitHandler != nil {
-		engine.POST(joinRoute(urlPrefix, "/CloneRepo"), gitHandler.CloneRepository)
-	}
-
-	if gatewayHandler != nil {
-		registerGatewayRoutes(engine, gatewayHandler)
+	if handlers != nil {
+		registerFileRoutes(engine, urlPrefix, handlers.File)
+		registerGitRoutes(engine, urlPrefix, handlers.Git)
+		if handlers.Gateway != nil {
+			registerGatewayRoutes(engine, handlers.Gateway)
+		}
 	}
 
 	return engine
+}
+
+func registerFileRoutes(engine *gin.Engine, urlPrefix string, h *apphandler.FileHandler) {
+	if h == nil {
+		return
+	}
+	engine.POST(joinRoute(urlPrefix, "/CreateFolder"), h.CreateFolder)
+	engine.POST(joinRoute(urlPrefix, "/CreateFile"), h.CreateFile)
+	engine.POST(joinRoute(urlPrefix, "/DeletePath"), h.DeletePath)
+	engine.POST(joinRoute(urlPrefix, "/MovePath"), h.MovePath)
+	engine.POST(joinRoute(urlPrefix, "/CopyPath"), h.CopyPath)
+	engine.POST(joinRoute(urlPrefix, "/RenamePath"), h.RenamePath)
+	engine.POST(joinRoute(urlPrefix, "/ListFiles"), h.ListFiles)
+	engine.POST(joinRoute(urlPrefix, "/ValidatePath"), h.ValidatePath)
+	engine.POST(joinRoute(urlPrefix, "/GetFolderNodePath"), h.GetFolderNodePath)
+	engine.POST(joinRoute(urlPrefix, "/ListRecycleBin"), h.ListRecycleBin)
+	engine.POST(joinRoute(urlPrefix, "/RestorePath"), h.RestorePath)
+	engine.POST(joinRoute(urlPrefix, "/EmptyRecycleBin"), h.EmptyRecycleBin)
+	engine.POST(joinRoute(urlPrefix, "/GetFileInfo"), h.GetFileInfo)
+	engine.POST(joinRoute(urlPrefix, "/ReadFile"), h.ReadFile)
+	engine.POST(joinRoute(urlPrefix, "/WriteFile"), h.WriteFile)
+	engine.POST(joinRoute(urlPrefix, "/DownloadFile"), h.DownloadFile)
+}
+
+func registerGitRoutes(engine *gin.Engine, urlPrefix string, h *apphandler.GitHandler) {
+	if h == nil {
+		return
+	}
+	engine.POST(joinRoute(urlPrefix, "/CloneRepo"), h.CloneRepository)
+	engine.POST(joinRoute(urlPrefix, "/CreateGitFolder"), h.CreateGitFolder)
+	engine.POST(joinRoute(urlPrefix, "/GetGitFolderStatus"), h.GetGitFolderStatus)
+	engine.POST(joinRoute(urlPrefix, "/PullRepo"), h.PullRepo)
+	engine.POST(joinRoute(urlPrefix, "/StageFiles"), h.StageFiles)
+	engine.POST(joinRoute(urlPrefix, "/UnstageFiles"), h.UnstageFiles)
+	engine.POST(joinRoute(urlPrefix, "/Commit"), h.Commit)
+	engine.POST(joinRoute(urlPrefix, "/PushRepo"), h.PushRepo)
+	engine.POST(joinRoute(urlPrefix, "/CommitAndPush"), h.CommitAndPush)
+	engine.POST(joinRoute(urlPrefix, "/CreateBranch"), h.CreateBranch)
+	engine.POST(joinRoute(urlPrefix, "/CheckoutBranch"), h.CheckoutBranch)
+	engine.POST(joinRoute(urlPrefix, "/ListBranches"), h.ListBranches)
+	engine.POST(joinRoute(urlPrefix, "/GetStatus"), h.GetStatus)
+	engine.POST(joinRoute(urlPrefix, "/GetCommitHistory"), h.GetCommitHistory)
+	engine.POST(joinRoute(urlPrefix, "/DiscardChanges"), h.DiscardChanges)
+	engine.POST(joinRoute(urlPrefix, "/DeleteRepo"), h.DeleteRepo)
 }
 
 // registerGatewayRoutes mounts the Jupyter-compatible REST + WebSocket surface

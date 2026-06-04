@@ -13,10 +13,12 @@ import (
 	apphandler "git.woa.com/leondli/workspace-service/internal/adapter/http/handler"
 	httprouter "git.woa.com/leondli/workspace-service/internal/adapter/http/router"
 	appconfig "git.woa.com/leondli/workspace-service/internal/config"
+	infrafs "git.woa.com/leondli/workspace-service/internal/infra/fs"
 	infragateway "git.woa.com/leondli/workspace-service/internal/infra/gateway"
 	infragit "git.woa.com/leondli/workspace-service/internal/infra/git"
 	applogger "git.woa.com/leondli/workspace-service/internal/infra/logger"
 	inframysql "git.woa.com/leondli/workspace-service/internal/infra/persistence/mysql"
+	usecasefs "git.woa.com/leondli/workspace-service/internal/usecase/fs"
 	usecasegit "git.woa.com/leondli/workspace-service/internal/usecase/git"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -51,8 +53,16 @@ func main() {
 		log.Warn("mysql dsn is empty, file_node recording is disabled")
 	}
 
-	workspaceGitClient := infragit.NewWorkspaceGitClient(fileNodeStore)
-	gitService := usecasegit.NewService(workspaceGitClient, cfg.Workspace.MountRoot)
+	mountRoot := usecasegit.CleanMountRoot(cfg.Workspace.MountRoot)
+	workspaceFSClient := infrafs.NewWorkspaceFSClient(fileNodeStore, mountRoot)
+	fileService := usecasefs.NewService(workspaceFSClient, mountRoot)
+	fileHandler := apphandler.NewFileHandler(fileService)
+	gitMetaRoot := usecasegit.CleanMountRoot(cfg.Workspace.GitMetaRoot)
+	workspaceGitClient := infragit.NewWorkspaceGitClient(fileNodeStore, mountRoot, gitMetaRoot)
+	gitService := usecasegit.NewService(workspaceGitClient, mountRoot, fileNodeStore)
+	if gitMetaRoot != "" {
+		log.Info("git metadata stored outside workspace mount", zap.String("git_meta_root", gitMetaRoot))
+	}
 	gitHandler := apphandler.NewGitHandler(gitService)
 
 	gatewayClient, err := infragateway.NewOptionalGateway(cfg.Gateway, log)
@@ -68,7 +78,11 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.Server.Address,
-		Handler:           httprouter.NewWithHandlers(log, cfg.Server.URLPrefix, gitHandler, gatewayHandler),
+		Handler: httprouter.NewWithHandlers(log, cfg.Server.URLPrefix, &httprouter.Handlers{
+			File:    fileHandler,
+			Git:     gitHandler,
+			Gateway: gatewayHandler,
+		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

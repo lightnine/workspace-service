@@ -106,10 +106,10 @@ func (fs *identityFS) upsert(path string, info os.FileInfo) error {
 	}
 	return fs.store.UpsertCreatedOrUpdated(fs.ctx, domainfile.NodeMutation{
 		InodeID: inodeID,
-		Actor: domainfile.NodeActor{
-			OwnerUIN: fs.actor.OwnerUIN,
-			UIN:      fs.actor.UIN,
-		},
+		Actor: domainfile.NewNodeActor(
+			fs.actor.OwnerUIN, fs.actor.UIN, fs.actor.AppID, fs.actor.WorkspaceID,
+		),
+		NodeType: domainfile.NodeTypeFromDir(info.IsDir()),
 	})
 }
 
@@ -123,10 +123,9 @@ func (fs *identityFS) markDeleted(path string, info os.FileInfo) error {
 	}
 	return fs.store.MarkDeleted(fs.ctx, domainfile.NodeMutation{
 		InodeID: inodeID,
-		Actor: domainfile.NodeActor{
-			OwnerUIN: fs.actor.OwnerUIN,
-			UIN:      fs.actor.UIN,
-		},
+		Actor: domainfile.NewNodeActor(
+			fs.actor.OwnerUIN, fs.actor.UIN, fs.actor.AppID, fs.actor.WorkspaceID,
+		),
 	})
 }
 

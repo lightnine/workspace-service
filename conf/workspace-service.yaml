@@ -7,6 +7,8 @@ server:
 
 workspace:
   mount_root: "~/mnt/studio"
+  # Git object database outside JuiceFS (local disk / dedicated volume). Empty = .git under worktree (dev only).
+  git_meta_root: "~/mnt/git-meta"
 
 log:
   level: info
@@ -24,7 +26,7 @@ mysql:
 # gateway is a transparent reverse proxy to a remote Jupyter Gateway /
 # Enterprise Gateway. Leave url empty to disable (proxy routes are not mounted).
 gateway:
-  url: ""
+  url: "http://127.0.0.1:8888"
   ws_url: ""
   auth_header_key: "Authorization"
   auth_scheme: "token"

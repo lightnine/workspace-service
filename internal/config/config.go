@@ -25,7 +25,8 @@ type ServerConfig struct {
 }
 
 type WorkspaceConfig struct {
-	MountRoot string
+	MountRoot   string
+	GitMetaRoot string
 }
 
 type LogConfig struct {
@@ -110,7 +111,8 @@ func Load(configFile string) (*Config, error) {
 			ShutdownTimeout: v.GetDuration("server.shutdown_timeout"),
 		},
 		Workspace: WorkspaceConfig{
-			MountRoot: v.GetString("workspace.mount_root"),
+			MountRoot:   v.GetString("workspace.mount_root"),
+			GitMetaRoot: v.GetString("workspace.git_meta_root"),
 		},
 		Log: LogConfig{
 			Level:       v.GetString("log.level"),
@@ -152,6 +154,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.shutdown_timeout", "10s")
 
 	v.SetDefault("workspace.mount_root", "~/mnt/studio")
+	v.SetDefault("workspace.git_meta_root", "")
 
 	v.SetDefault("log.level", "info")
 	v.SetDefault("log.encoding", "json")
