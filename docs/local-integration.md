@@ -40,15 +40,11 @@ curl -s -X POST http://127.0.0.1:8888/api/kernels \
 
 ## 2. workspace-service（:8080）
 
-`conf/workspace-service.yaml`：
+复制配置模板并填写本机 MySQL 密码：
 
-```yaml
-gateway:
-  url: "http://127.0.0.1:8888"
-workspace:
-  mount_root: "~/mnt/studio"
-mysql:
-  dsn: "..."  # 本机 MySQL
+```bash
+cp conf/workspace-service.yaml.example conf/workspace-service.yaml
+# 编辑 mysql.dsn
 ```
 
 ```bash
@@ -79,7 +75,8 @@ go run ./cmd/server -config conf/workspace-service.yaml
 
 | 接口 | 说明 |
 |------|------|
-| `ListFiles` | 增强字段：`inode_id`、`owner_uin`、`creator_uin`、`node_type`（`file`/`directory`/`git_folder`）、`is_git_folder`、`file_id`（Git 目录为 path 的 base64） |
+| `ListFiles` | 增强字段：`inode_id`、`owner_uin`、`creator_uin`、`node_type`（`file`/`directory`/`git_folder`/`notebook`）、`is_git_folder`、`file_id`（Git 目录为 path 的 base64） |
+| `CreateNotebook` | 创建 `.ipynb`（nbformat v4 空 notebook），`file_node.node_type=notebook`；`path` 可省略 `.ipynb` 后缀 |
 | `ValidatePath` | `parent_path` + `name` → `{exists}`，对应现网 `ValidateFileName` |
 | `GetFolderNodePath` | `path` → `{nodes:[]}` 面包屑 |
 | `DeletePath` | `soft_delete:true` 移入 `{user}/trash/`；`permanent:true` 硬删 |

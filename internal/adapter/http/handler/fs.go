@@ -50,6 +50,22 @@ func (h *FileHandler) CreateFile(c *gin.Context) {
 	writeFSResult(c, out, err)
 }
 
+func (h *FileHandler) CreateNotebook(c *gin.Context) {
+	var body req.CreateNotebookReq
+	if !bindFSJSON(c, &body) {
+		return
+	}
+	rc, ok := bindWorkspaceContext(c, &body.WorkspaceContext)
+	if !ok {
+		return
+	}
+	out, err := h.fileService.CreateNotebook(c.Request.Context(), usecasefs.CreateNotebookReq{
+		Context: rc, Path: body.Path,
+		KernelName: body.KernelName, Overwrite: body.Overwrite,
+	})
+	writeFSResult(c, out, err)
+}
+
 func (h *FileHandler) DeletePath(c *gin.Context) {
 	var body req.DeletePathReq
 	if !bindFSJSON(c, &body) {

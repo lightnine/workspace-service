@@ -32,7 +32,7 @@ type FileInfo struct {
 	InodeID    uint64
 	OwnerUIN   string
 	CreatorUIN  string
-	NodeType    string // file | directory | git_folder (from file_node when known)
+	NodeType    string // file | directory | git_folder | notebook (from file_node when known)
 	IsGitFolder bool
 	InRecycle  bool
 	OriginPath string // set for recycle-bin entries
@@ -48,6 +48,13 @@ type CreateFileReq struct {
 	Path      string
 	Content   []byte // empty => touch empty file
 	Overwrite bool
+}
+
+type CreateNotebookReq struct {
+	Actor      Actor
+	Path       string // must end with .ipynb
+	KernelName string // optional; default python3
+	Overwrite  bool
 }
 
 type DeletePathReq struct {
@@ -146,6 +153,7 @@ type WriteFileReq struct {
 type WorkspaceFS interface {
 	CreateFolder(ctx context.Context, req CreateFolderReq) (FileInfo, error)
 	CreateFile(ctx context.Context, req CreateFileReq) (FileInfo, error)
+	CreateNotebook(ctx context.Context, req CreateNotebookReq) (FileInfo, error)
 	DeletePath(ctx context.Context, req DeletePathReq) error
 	MovePath(ctx context.Context, req MovePathReq) (FileInfo, error)
 	CopyPath(ctx context.Context, req CopyPathReq) (FileInfo, error)

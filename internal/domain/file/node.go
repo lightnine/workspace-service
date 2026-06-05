@@ -13,7 +13,7 @@ type NodeActor struct {
 type NodeMutation struct {
 	InodeID  uint64
 	Actor    NodeActor
-	NodeType string // file | directory | git_folder
+	NodeType string // file | directory | git_folder | notebook
 }
 
 // NodeRecord is the persisted ownership row for a JuiceFS inode.

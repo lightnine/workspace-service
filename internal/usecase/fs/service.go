@@ -18,6 +18,7 @@ var ErrInvalidFileRequest = errors.New("invalid file request")
 type FileService interface {
 	CreateFolder(ctx context.Context, req CreateFolderReq) (FileInfoResp, error)
 	CreateFile(ctx context.Context, req CreateFileReq) (FileInfoResp, error)
+	CreateNotebook(ctx context.Context, req CreateNotebookReq) (FileInfoResp, error)
 	DeletePath(ctx context.Context, req DeletePathReq) error
 	MovePath(ctx context.Context, req MovePathReq) (FileInfoResp, error)
 	CopyPath(ctx context.Context, req CopyPathReq) (FileInfoResp, error)
@@ -61,6 +62,10 @@ func (s *Service) resolveActorAndPath(ctx identity.RequestContext, path string) 
 func (s *Service) resolveAbsPath(ctx identity.RequestContext, relPath string) (string, error) {
 	if s.mountRoot == "" {
 		return "", fmt.Errorf("%w: workspace mount root is required", ErrInvalidFileRequest)
+	}
+	// Empty path means the caller's workspace user root (ListFiles/Home, etc.).
+	if strings.TrimSpace(relPath) == "" {
+		return filepath.Join(s.mountRoot, ctx.Normalize().UserPathPrefix()), nil
 	}
 	resolved, err := ctx.ResolveRelativePath(relPath)
 	if err != nil {

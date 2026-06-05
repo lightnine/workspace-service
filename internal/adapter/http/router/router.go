@@ -42,6 +42,7 @@ func registerFileRoutes(engine *gin.Engine, urlPrefix string, h *apphandler.File
 	}
 	engine.POST(joinRoute(urlPrefix, "/CreateFolder"), h.CreateFolder)
 	engine.POST(joinRoute(urlPrefix, "/CreateFile"), h.CreateFile)
+	engine.POST(joinRoute(urlPrefix, "/CreateNotebook"), h.CreateNotebook)
 	engine.POST(joinRoute(urlPrefix, "/DeletePath"), h.DeletePath)
 	engine.POST(joinRoute(urlPrefix, "/MovePath"), h.MovePath)
 	engine.POST(joinRoute(urlPrefix, "/CopyPath"), h.CopyPath)

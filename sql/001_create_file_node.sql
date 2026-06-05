@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS file_node (
     uin VARCHAR(64) NOT NULL COMMENT 'operator sub-account uin',
     app_id VARCHAR(64) NOT NULL COMMENT 'tenant / app id',
     workspace_id VARCHAR(128) NOT NULL COMMENT 'workspace id',
-    node_type VARCHAR(16) NOT NULL DEFAULT 'file' COMMENT 'file | directory | git_folder',
+    node_type VARCHAR(16) NOT NULL DEFAULT 'file' COMMENT 'file | directory | git_folder | notebook',
     created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT 'created time',
     updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT 'updated time',
     deleted_at DATETIME(3) NULL DEFAULT NULL COMMENT 'soft-delete marker in business table (path may still exist on mount)',

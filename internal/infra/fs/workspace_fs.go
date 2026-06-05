@@ -10,6 +10,7 @@ import (
 
 	domainfile "git.woa.com/leondli/workspace-service/internal/domain/file"
 	domainfs "git.woa.com/leondli/workspace-service/internal/domain/fs"
+	"git.woa.com/leondli/workspace-service/internal/domain/notebook"
 )
 
 const maxInlineReadSize = 32 * 1024 * 1024 // 32 MiB
@@ -53,6 +54,19 @@ func (c *WorkspaceFSClient) CreateFile(ctx context.Context, req domainfs.CreateF
 	}
 	recordUpsert(ctx, c.store, req.Actor, req.Path)
 	return c.buildFileInfo(req.Path)
+}
+
+func (c *WorkspaceFSClient) CreateNotebook(ctx context.Context, req domainfs.CreateNotebookReq) (domainfs.FileInfo, error) {
+	content := notebook.DefaultNotebook(req.KernelName)
+	info, err := c.CreateFile(ctx, domainfs.CreateFileReq{
+		Actor: req.Actor, Path: req.Path, Content: content, Overwrite: req.Overwrite,
+	})
+	if err != nil {
+		return domainfs.FileInfo{}, err
+	}
+	RecordInode(ctx, c.store, req.Actor, req.Path, domainfile.NodeTypeNotebook)
+	info.NodeType = domainfile.NodeTypeNotebook
+	return c.enrichFileInfo(ctx, req.Actor, info), nil
 }
 
 func (c *WorkspaceFSClient) DeletePath(ctx context.Context, req domainfs.DeletePathReq) error {

@@ -1,0 +1,12 @@
+# Binaries
+/workspace-service
+*.exe
+*.test
+
+# Local config (copy from conf/workspace-service.yaml.example)
+conf/workspace-service.yaml
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store

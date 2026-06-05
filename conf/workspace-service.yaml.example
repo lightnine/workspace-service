@@ -7,7 +7,6 @@ server:
 
 workspace:
   mount_root: "~/mnt/studio"
-  # Git object database outside JuiceFS (local disk / dedicated volume). Empty = .git under worktree (dev only).
   git_meta_root: "~/mnt/git-meta"
 
 log:
@@ -18,13 +17,11 @@ log:
     - stdout
 
 mysql:
-  dsn: "root:leondli123@tcp(127.0.0.1:3306)/workspace?charset=utf8mb4&parseTime=True&loc=Local"
+  dsn: "root:YOUR_PASSWORD@tcp(127.0.0.1:3306)/workspace?charset=utf8mb4&parseTime=True&loc=Local"
   max_open_conns: 20
   max_idle_conns: 10
   conn_max_lifetime: 30m
 
-# gateway is a transparent reverse proxy to a remote Jupyter Gateway /
-# Enterprise Gateway. Leave url empty to disable (proxy routes are not mounted).
 gateway:
   url: "http://127.0.0.1:8888"
   ws_url: ""

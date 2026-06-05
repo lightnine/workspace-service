@@ -12,6 +12,13 @@ type CreateFileReq struct {
 	Overwrite     bool   `json:"overwrite"`
 }
 
+type CreateNotebookReq struct {
+	WorkspaceContext
+	Path       string `json:"path"`
+	KernelName string `json:"kernel_name"`
+	Overwrite  bool   `json:"overwrite"`
+}
+
 type DeletePathReq struct {
 	WorkspaceContext
 	Path       string `json:"path"`

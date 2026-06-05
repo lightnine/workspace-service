@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	domainfs "git.woa.com/leondli/workspace-service/internal/domain/fs"
@@ -20,6 +21,13 @@ type CreateFileReq struct {
 	Path       string
 	Content    []byte
 	ContentB64 string
+	Overwrite  bool
+}
+
+type CreateNotebookReq struct {
+	Context    identity.RequestContext
+	Path       string
+	KernelName string
 	Overwrite  bool
 }
 
@@ -124,6 +132,39 @@ func (s *Service) CreateFile(ctx context.Context, input CreateFileReq) (FileInfo
 		return FileInfoResp{}, fmt.Errorf("create file: %w", err)
 	}
 	return mapFileInfo(info, s.mountRoot), nil
+}
+
+func (s *Service) CreateNotebook(ctx context.Context, input CreateNotebookReq) (FileInfoResp, error) {
+	path, err := normalizeNotebookPath(input.Path)
+	if err != nil {
+		return FileInfoResp{}, err
+	}
+	actor, abs, err := s.resolveActorAndPath(input.Context, path)
+	if err != nil {
+		return FileInfoResp{}, err
+	}
+	info, err := s.fsClient.CreateNotebook(ctx, domainfs.CreateNotebookReq{
+		Actor: actor, Path: abs, KernelName: input.KernelName, Overwrite: input.Overwrite,
+	})
+	if err != nil {
+		return FileInfoResp{}, fmt.Errorf("create notebook: %w", err)
+	}
+	return mapFileInfo(info, s.mountRoot), nil
+}
+
+func normalizeNotebookPath(path string) (string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", fmt.Errorf("%w: path is required", ErrInvalidFileRequest)
+	}
+	base := filepath.Base(path)
+	if base == "." || base == ".." || strings.ContainsAny(base, `/\`) {
+		return "", fmt.Errorf("%w: invalid notebook name", ErrInvalidFileRequest)
+	}
+	if !strings.HasSuffix(strings.ToLower(base), ".ipynb") {
+		path = path + ".ipynb"
+	}
+	return path, nil
 }
 
 func (s *Service) DeletePath(ctx context.Context, input DeletePathReq) error {

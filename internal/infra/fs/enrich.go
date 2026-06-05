@@ -22,7 +22,7 @@ func (c *WorkspaceFSClient) enrichFileInfo(ctx context.Context, actor domainfs.A
 		}
 	}
 	if info.NodeType == "" {
-		info.NodeType = domainfile.NodeTypeFromDir(info.IsDir)
+		info.NodeType = domainfile.InferNodeTypeFromName(info.Name, info.IsDir)
 	}
 	if !info.IsGitFolder {
 		info.IsGitFolder = info.NodeType == domainfile.NodeTypeGitFolder || isGitFolderPath(info.Path)
@@ -59,7 +59,7 @@ func (c *WorkspaceFSClient) enrichMany(ctx context.Context, actor domainfs.Actor
 			applyNodeRecord(&files[i], rec)
 		}
 		if files[i].NodeType == "" {
-			files[i].NodeType = domainfile.NodeTypeFromDir(files[i].IsDir)
+			files[i].NodeType = domainfile.InferNodeTypeFromName(files[i].Name, files[i].IsDir)
 		}
 		if !files[i].IsGitFolder {
 			files[i].IsGitFolder = files[i].NodeType == domainfile.NodeTypeGitFolder ||
