@@ -10,12 +10,16 @@ import (
 )
 
 func (c *WorkspaceFSClient) enrichFileInfo(ctx context.Context, actor domainfs.Actor, info domainfs.FileInfo) domainfs.FileInfo {
-	if inodeID, ok := inodeFromPath(info.Path); ok {
-		info.InodeID = inodeID
+	if info.InodeID == 0 {
+		if inodeID, ok := inodeFromPath(info.Path); ok {
+			info.InodeID = inodeID
+		}
+	}
+	if info.InodeID > 0 {
 		if c.store != nil {
-			records, err := c.store.LookupByInodeIDs(ctx, []uint64{inodeID})
+			records, err := c.store.LookupByInodeIDs(ctx, []uint64{info.InodeID})
 			if err == nil {
-				if rec, ok := records[inodeID]; ok {
+				if rec, ok := records[info.InodeID]; ok {
 					applyNodeRecord(&info, rec)
 				}
 			}
@@ -41,9 +45,13 @@ func (c *WorkspaceFSClient) enrichFileInfo(ctx context.Context, actor domainfs.A
 func (c *WorkspaceFSClient) enrichMany(ctx context.Context, actor domainfs.Actor, files []domainfs.FileInfo) []domainfs.FileInfo {
 	var inodeIDs []uint64
 	for i := range files {
-		if id, ok := inodeFromPath(files[i].Path); ok {
-			files[i].InodeID = id
-			inodeIDs = append(inodeIDs, id)
+		if files[i].InodeID == 0 {
+			if id, ok := inodeFromPath(files[i].Path); ok {
+				files[i].InodeID = id
+			}
+		}
+		if files[i].InodeID > 0 {
+			inodeIDs = append(inodeIDs, files[i].InodeID)
 		}
 	}
 

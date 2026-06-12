@@ -2,9 +2,11 @@ package git
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -295,6 +297,80 @@ func (c *WorkspaceGitClient) Status(ctx context.Context, req domaingit.StatusReq
 		})
 	}
 	return result, nil
+}
+
+func (c *WorkspaceGitClient) RepoInfo(ctx context.Context, req domaingit.RepoInfoReq) (domaingit.RepoInfoResult, error) {
+	repo, err := c.openRepo(ctx, req.Path, req.Actor)
+	if err != nil {
+		return domaingit.RepoInfoResult{}, err
+	}
+	result := domaingit.RepoInfoResult{CurrentBranch: currentBranch(repo)}
+	if remote, err := repo.Remote(defaultRemoteName); err == nil && remote != nil {
+		if cfg := remote.Config(); len(cfg.URLs) > 0 {
+			result.RemoteURL = cfg.URLs[0]
+		}
+	}
+	return result, nil
+}
+
+func (c *WorkspaceGitClient) FileDiff(ctx context.Context, req domaingit.FileDiffReq) (domaingit.FileDiffResult, error) {
+	rel := strings.TrimSpace(filepath.ToSlash(req.File))
+	if rel == "" || rel == "." {
+		return domaingit.FileDiffResult{}, fmt.Errorf("file is required")
+	}
+
+	repo, err := c.openRepo(ctx, req.Path, req.Actor)
+	if err != nil {
+		return domaingit.FileDiffResult{}, err
+	}
+
+	result := domaingit.FileDiffResult{File: rel}
+	if headContent, missing, err := headFileContent(repo, rel); err != nil {
+		return domaingit.FileDiffResult{}, err
+	} else {
+		result.HeadMissing = missing
+		if !missing {
+			result.HeadContentBase64 = base64.StdEncoding.EncodeToString(headContent)
+		}
+	}
+
+	workPath := filepath.Join(req.Path, filepath.FromSlash(rel))
+	workContent, err := os.ReadFile(workPath)
+	if os.IsNotExist(err) {
+		result.WorktreeMissing = true
+	} else if err != nil {
+		return domaingit.FileDiffResult{}, fmt.Errorf("read worktree file: %w", err)
+	} else {
+		result.WorktreeContentBase64 = base64.StdEncoding.EncodeToString(workContent)
+	}
+	return result, nil
+}
+
+func headFileContent(repo *gogit.Repository, relPath string) ([]byte, bool, error) {
+	head, err := repo.Head()
+	if err != nil {
+		return nil, true, fmt.Errorf("head: %w", err)
+	}
+	commit, err := repo.CommitObject(head.Hash())
+	if err != nil {
+		return nil, true, fmt.Errorf("commit: %w", err)
+	}
+	tree, err := commit.Tree()
+	if err != nil {
+		return nil, true, fmt.Errorf("tree: %w", err)
+	}
+	file, err := tree.File(relPath)
+	if errors.Is(err, object.ErrFileNotFound) {
+		return nil, true, nil
+	}
+	if err != nil {
+		return nil, true, fmt.Errorf("tree file: %w", err)
+	}
+	content, err := file.Contents()
+	if err != nil {
+		return nil, false, fmt.Errorf("file contents: %w", err)
+	}
+	return []byte(content), false, nil
 }
 
 func (c *WorkspaceGitClient) CommitHistory(ctx context.Context, req domaingit.CommitHistoryReq) (domaingit.CommitHistoryResult, error) {

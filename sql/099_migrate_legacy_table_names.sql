@@ -1,0 +1,3 @@
+-- One-time migration from pre-ws_ table names (run only if old tables exist).
+-- RENAME TABLE file_node TO ws_file_node;
+-- RENAME TABLE kernel_session TO ws_kernel_session;

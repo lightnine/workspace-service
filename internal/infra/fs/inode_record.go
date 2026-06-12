@@ -13,7 +13,7 @@ func nodeActor(actor domainfs.Actor) domainfile.NodeActor {
 	return domainfile.NewNodeActor(actor.OwnerUIN, actor.UIN, actor.AppID, actor.WorkspaceID)
 }
 
-// RecordInode upserts file_node for a path on the mount (used by FS and Git usecases).
+// RecordInode upserts ws_file_node for a path on the mount (used by FS and Git usecases).
 func RecordInode(ctx context.Context, store domainfile.NodeStore, actor domainfs.Actor, absPath, nodeType string) {
 	if store == nil {
 		return

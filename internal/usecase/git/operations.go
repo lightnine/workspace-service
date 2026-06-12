@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	domaingit "git.woa.com/leondli/workspace-service/internal/domain/git"
@@ -95,6 +96,20 @@ type FileStatus struct {
 type StatusResp struct {
 	Clean bool         `json:"clean"`
 	Files []FileStatus `json:"files"`
+}
+
+type FileDiffReq struct {
+	Context identity.RequestContext
+	Path    string
+	File    string
+}
+
+type FileDiffResp struct {
+	File                  string `json:"file"`
+	HeadContentBase64     string `json:"head_content_base64,omitempty"`
+	WorktreeContentBase64 string `json:"worktree_content_base64,omitempty"`
+	HeadMissing           bool   `json:"head_missing,omitempty"`
+	WorktreeMissing       bool   `json:"worktree_missing,omitempty"`
 }
 
 type CommitHistoryReq struct {
@@ -270,6 +285,33 @@ func (s *Service) GetStatus(ctx context.Context, input StatusReq) (StatusResp, e
 		})
 	}
 	return resp, nil
+}
+
+func (s *Service) GetFileDiff(ctx context.Context, input FileDiffReq) (FileDiffResp, error) {
+	actor, path, err := s.resolveActorAndPath(input.Context, input.Path)
+	if err != nil {
+		return FileDiffResp{}, err
+	}
+	file := strings.TrimSpace(filepath.ToSlash(input.File))
+	if file == "" {
+		return FileDiffResp{}, fmt.Errorf("%w: file is required", ErrInvalidGitRequest)
+	}
+
+	result, err := s.gitClient.FileDiff(ctx, domaingit.FileDiffReq{
+		Actor: actor,
+		Path:  path,
+		File:  file,
+	})
+	if err != nil {
+		return FileDiffResp{}, fmt.Errorf("get file diff: %w", err)
+	}
+	return FileDiffResp{
+		File:                  result.File,
+		HeadContentBase64:     result.HeadContentBase64,
+		WorktreeContentBase64: result.WorktreeContentBase64,
+		HeadMissing:           result.HeadMissing,
+		WorktreeMissing:       result.WorktreeMissing,
+	}, nil
 }
 
 func (s *Service) GetCommitHistory(ctx context.Context, input CommitHistoryReq) (CommitHistoryResp, error) {

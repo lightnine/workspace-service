@@ -63,6 +63,9 @@ func (f *fakeGitCommandService) ListBranches(context.Context, usecasegit.ListBra
 func (f *fakeGitCommandService) GetStatus(context.Context, usecasegit.StatusReq) (usecasegit.StatusResp, error) {
 	return usecasegit.StatusResp{}, f.err
 }
+func (f *fakeGitCommandService) GetFileDiff(context.Context, usecasegit.FileDiffReq) (usecasegit.FileDiffResp, error) {
+	return usecasegit.FileDiffResp{}, f.err
+}
 func (f *fakeGitCommandService) GetCommitHistory(context.Context, usecasegit.CommitHistoryReq) (usecasegit.CommitHistoryResp, error) {
 	return usecasegit.CommitHistoryResp{}, f.err
 }

@@ -49,6 +49,12 @@ func (f *fakeGitClient) ListBranches(context.Context, domaingit.ListBranchesReq)
 func (f *fakeGitClient) Status(context.Context, domaingit.StatusReq) (domaingit.StatusResult, error) {
 	return domaingit.StatusResult{}, nil
 }
+func (f *fakeGitClient) FileDiff(context.Context, domaingit.FileDiffReq) (domaingit.FileDiffResult, error) {
+	return domaingit.FileDiffResult{}, nil
+}
+func (f *fakeGitClient) RepoInfo(context.Context, domaingit.RepoInfoReq) (domaingit.RepoInfoResult, error) {
+	return domaingit.RepoInfoResult{}, nil
+}
 func (f *fakeGitClient) CommitHistory(context.Context, domaingit.CommitHistoryReq) (domaingit.CommitHistoryResult, error) {
 	return domaingit.CommitHistoryResult{}, nil
 }

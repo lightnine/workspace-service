@@ -8,8 +8,8 @@ WeData Studio workspace file/Git API and Jupyter gateway proxy.
 cp conf/workspace-service.yaml.example conf/workspace-service.yaml
 # edit mysql.dsn
 
-mysql -u root -p workspace < sql/001_create_file_node.sql
-mysql -u root -p workspace < sql/002_create_kernel_session.sql
+./scripts/apply-schema.sh workspace
+# or: mysql -u root -p workspace < sql/001_create_ws_file_node.sql ...
 
 go run ./cmd/server -config conf/workspace-service.yaml
 ```

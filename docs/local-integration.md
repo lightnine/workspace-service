@@ -4,14 +4,24 @@
 
 ## 前置
 
-MySQL 需有 `file_node` 表：
+MySQL 需执行 `sql/0*.sql`（均以 `ws_` 为前缀）：
 
 ```bash
-mysql -u root -p workspace < sql/001_create_file_node.sql
-mysql -u root -p workspace < sql/002_create_kernel_session.sql
+./scripts/apply-schema.sh workspace
 ```
 
-若库中是更早期的表（缺少 `app_id` / `workspace_id`），需自行 `ALTER TABLE` 补齐这两列及 `idx_file_node_app_workspace` 索引。
+| 表名 | 用途 | 代码是否已用 |
+|------|------|-------------|
+| `ws_file_node` | inode → 操作人 / node_type | 是 |
+| `ws_kernel_session` | Jupyter session 元数据 | 是 |
+| `ws_recycle_item` | 回收站业务元数据 | 预留 P1 |
+| `ws_git_operation` | Git 操作审计 | 预留 P2 |
+| `ws_favorite` | 收藏 | 预留 P1 |
+| `ws_share_acl` | 共享权限 | 预留 P1 |
+
+从旧表名迁移：`sql/099_migrate_legacy_table_names.sql`（`file_node` → `ws_file_node`）。
+
+升级 workspace-service 后需**重启进程**，否则新路由（如 `CreateNotebook`）会 404。
 
 | 组件 | 说明 |
 |------|------|
@@ -75,8 +85,8 @@ go run ./cmd/server -config conf/workspace-service.yaml
 
 | 接口 | 说明 |
 |------|------|
-| `ListFiles` | 增强字段：`inode_id`、`owner_uin`、`creator_uin`、`node_type`（`file`/`directory`/`git_folder`/`notebook`）、`is_git_folder`、`file_id`（Git 目录为 path 的 base64） |
-| `CreateNotebook` | 创建 `.ipynb`（nbformat v4 空 notebook），`file_node.node_type=notebook`；`path` 可省略 `.ipynb` 后缀 |
+| `ListFiles` | `path` 为工作区相对路径；`file_id` 为 **inode_id 字符串**（稳定 opaque id，不等于 path）；未来 `ide_code_file` UUID 会替换 |
+| `CreateNotebook` | 创建 `.ipynb`，`ws_file_node.node_type=notebook`；`path` 可省略 `.ipynb` 后缀 |
 | `ValidatePath` | `parent_path` + `name` → `{exists}`，对应现网 `ValidateFileName` |
 | `GetFolderNodePath` | `path` → `{nodes:[]}` 面包屑 |
 | `DeletePath` | `soft_delete:true` 移入 `{user}/trash/`；`permanent:true` 硬删 |

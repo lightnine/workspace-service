@@ -35,6 +35,7 @@ type FolderNodeResp struct {
 	CreatorUIN  string `json:"creator_uin,omitempty"`
 	NodeType    string `json:"node_type,omitempty"`
 	IsGitFolder bool   `json:"is_git_folder"`
+	GitBranch   string `json:"git_branch,omitempty"`
 	FileID      string `json:"file_id,omitempty"`
 }
 
@@ -76,8 +77,18 @@ func (s *Service) GetFolderNodePath(ctx context.Context, input GetFolderNodePath
 		return GetFolderNodePathResp{}, fmt.Errorf("get folder node path: %w", err)
 	}
 	resp := GetFolderNodePathResp{}
+	nodes := make([]FileInfoResp, 0, len(result.Nodes))
 	for _, node := range result.Nodes {
-		resp.Nodes = append(resp.Nodes, mapFolderNode(node, s.mountRoot))
+		nodes = append(nodes, mapFileInfo(node, s.mountRoot))
+	}
+	nodes = s.enrichGitBranches(ctx, input.Context.Normalize(), nodes)
+	for _, n := range nodes {
+		resp.Nodes = append(resp.Nodes, FolderNodeResp{
+			Name: n.Name, Path: n.Path, IsDir: n.IsDir, Size: n.Size,
+			ModifyTime: n.ModifyTime, InodeID: n.InodeID, OwnerUIN: n.OwnerUIN,
+			CreatorUIN: n.CreatorUIN, NodeType: n.NodeType, IsGitFolder: n.IsGitFolder,
+			GitBranch: n.GitBranch, FileID: n.FileID,
+		})
 	}
 	return resp, nil
 }

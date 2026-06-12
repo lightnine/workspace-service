@@ -17,7 +17,7 @@ type FileNodeStore struct {
 
 type FileNode struct {
 	ID          uint64         `gorm:"column:id;primaryKey;autoIncrement"`
-	InodeID     uint64         `gorm:"column:inode_id;uniqueIndex:uk_file_node_inode_id"`
+	InodeID     uint64         `gorm:"column:inode_id;uniqueIndex:uk_ws_file_node_inode_id"`
 	OwnerUIN    string         `gorm:"column:owner_uin"`
 	UIN         string         `gorm:"column:uin"`
 	AppID       string         `gorm:"column:app_id"`
@@ -25,11 +25,11 @@ type FileNode struct {
 	NodeType    string         `gorm:"column:node_type"`
 	CreatedAt   time.Time      `gorm:"column:created_at"`
 	UpdatedAt   time.Time      `gorm:"column:updated_at"`
-	DeletedAt   gorm.DeletedAt `gorm:"column:deleted_at;index:idx_file_node_deleted_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"column:deleted_at;index:idx_ws_file_node_deleted_at"`
 }
 
 func (FileNode) TableName() string {
-	return "file_node"
+	return "ws_file_node"
 }
 
 func NewOptionalFileNodeStore(cfg appconfig.MySQLConfig) (domainfile.NodeStore, error) {

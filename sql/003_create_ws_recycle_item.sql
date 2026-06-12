@@ -1,0 +1,26 @@
+-- ws_recycle_item: recycle-bin metadata (complements POSIX .trash on mount; P1 productization).
+CREATE TABLE IF NOT EXISTS ws_recycle_item (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'primary key',
+    item_id VARCHAR(64) NOT NULL COMMENT 'stable trash entry id (uuid)',
+    inode_id BIGINT UNSIGNED NULL DEFAULT NULL COMMENT 'inode at delete time, if known',
+    original_path VARCHAR(1024) NOT NULL COMMENT 'workspace-relative path before delete',
+    trash_path VARCHAR(1024) NOT NULL DEFAULT '' COMMENT 'path under user .trash, if used',
+    name VARCHAR(512) NOT NULL COMMENT 'basename',
+    node_type VARCHAR(16) NOT NULL DEFAULT 'file' COMMENT 'file | directory | git_folder | notebook',
+    is_dir TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1=directory',
+    owner_uin VARCHAR(64) NOT NULL COMMENT 'owner account uin',
+    uin VARCHAR(64) NOT NULL COMMENT 'operator who deleted',
+    app_id VARCHAR(64) NOT NULL COMMENT 'tenant / app id',
+    workspace_id VARCHAR(128) NOT NULL COMMENT 'workspace id',
+    deleted_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT 'moved to trash at',
+    expire_at DATETIME(3) NULL DEFAULT NULL COMMENT 'TTL purge time (e.g. +30d)',
+    restored_at DATETIME(3) NULL DEFAULT NULL COMMENT 'set when restored',
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_ws_recycle_item_item_id (item_id),
+    KEY idx_ws_recycle_item_app_workspace (app_id, workspace_id),
+    KEY idx_ws_recycle_item_uin (uin),
+    KEY idx_ws_recycle_item_deleted_at (deleted_at),
+    KEY idx_ws_recycle_item_expire_at (expire_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='workspace recycle bin entries';

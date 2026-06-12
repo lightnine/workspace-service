@@ -2,7 +2,6 @@ package fs
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 
 	domainfs "git.woa.com/leondli/workspace-service/internal/domain/fs"
@@ -25,10 +24,6 @@ type RestorePathReq struct {
 
 type EmptyRecycleBinReq struct {
 	Context identity.RequestContext
-}
-
-func encodePathFileID(rel string) string {
-	return base64.StdEncoding.EncodeToString([]byte(rel))
 }
 
 func (s *Service) ListRecycleBin(ctx context.Context, input ListRecycleBinReq) (ListRecycleBinResp, error) {

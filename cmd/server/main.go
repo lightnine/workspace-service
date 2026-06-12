@@ -50,16 +50,16 @@ func main() {
 		log.Fatal("init file node store failed", zap.Error(err))
 	}
 	if fileNodeStore == nil {
-		log.Warn("mysql dsn is empty, file_node recording is disabled")
+		log.Warn("mysql dsn is empty, ws_file_node recording is disabled")
 	}
 
 	mountRoot := usecasegit.CleanMountRoot(cfg.Workspace.MountRoot)
 	workspaceFSClient := infrafs.NewWorkspaceFSClient(fileNodeStore, mountRoot)
-	fileService := usecasefs.NewService(workspaceFSClient, mountRoot)
-	fileHandler := apphandler.NewFileHandler(fileService)
 	gitMetaRoot := usecasegit.CleanMountRoot(cfg.Workspace.GitMetaRoot)
 	workspaceGitClient := infragit.NewWorkspaceGitClient(fileNodeStore, mountRoot, gitMetaRoot)
 	gitService := usecasegit.NewService(workspaceGitClient, mountRoot, fileNodeStore)
+	fileService := usecasefs.NewService(workspaceFSClient, mountRoot, gitService)
+	fileHandler := apphandler.NewFileHandler(fileService)
 	if gitMetaRoot != "" {
 		log.Info("git metadata stored outside workspace mount", zap.String("git_meta_root", gitMetaRoot))
 	}
@@ -70,7 +70,7 @@ func main() {
 		log.Fatal("init kernel session store failed", zap.Error(err))
 	}
 	if sessionStore == nil {
-		log.Warn("mysql dsn is empty, kernel_session recording is disabled")
+		log.Warn("mysql dsn is empty, ws_kernel_session recording is disabled")
 	}
 
 	gatewayClient, err := infragateway.NewOptionalGateway(cfg.Gateway, log)

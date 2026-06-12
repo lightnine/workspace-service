@@ -52,6 +52,12 @@ type GetStatusReq struct {
 	Path string `json:"path"`
 }
 
+type GetFileDiffReq struct {
+	WorkspaceContext
+	Path string `json:"path"`
+	File string `json:"file"`
+}
+
 type GetCommitHistoryReq struct {
 	WorkspaceContext
 	Path  string `json:"path"`

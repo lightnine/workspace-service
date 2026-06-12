@@ -133,6 +133,16 @@ type StatusReq struct {
 	Path  string
 }
 
+type RepoInfoReq struct {
+	Actor Actor
+	Path  string
+}
+
+type RepoInfoResult struct {
+	CurrentBranch string
+	RemoteURL     string
+}
+
 type FileStatus struct {
 	Path     string
 	Staging  string
@@ -162,6 +172,20 @@ type CommitHistoryResult struct {
 	Commits []CommitInfo
 }
 
+type FileDiffReq struct {
+	Actor Actor
+	Path  string
+	File  string
+}
+
+type FileDiffResult struct {
+	File                  string
+	HeadContentBase64     string
+	WorktreeContentBase64 string
+	HeadMissing           bool
+	WorktreeMissing       bool
+}
+
 type DiscardChangesReq struct {
 	Actor Actor
 	Path  string
@@ -186,6 +210,8 @@ type GitClient interface {
 	CheckoutBranch(ctx context.Context, req CheckoutBranchReq) (BranchResult, error)
 	ListBranches(ctx context.Context, req ListBranchesReq) (ListBranchesResult, error)
 	Status(ctx context.Context, req StatusReq) (StatusResult, error)
+	RepoInfo(ctx context.Context, req RepoInfoReq) (RepoInfoResult, error)
+	FileDiff(ctx context.Context, req FileDiffReq) (FileDiffResult, error)
 	CommitHistory(ctx context.Context, req CommitHistoryReq) (CommitHistoryResult, error)
 	DiscardChanges(ctx context.Context, req DiscardChangesReq) error
 	DeleteRepo(ctx context.Context, req DeleteRepoReq) error

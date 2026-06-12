@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,14 +37,16 @@ type FileService interface {
 }
 
 type Service struct {
-	fsClient  domainfs.WorkspaceFS
-	mountRoot string
+	fsClient     domainfs.WorkspaceFS
+	mountRoot    string
+	gitBranches  GitBranchLookup
 }
 
-func NewService(fsClient domainfs.WorkspaceFS, mountRoot string) *Service {
+func NewService(fsClient domainfs.WorkspaceFS, mountRoot string, gitBranches GitBranchLookup) *Service {
 	return &Service{
-		fsClient:  fsClient,
-		mountRoot: cleanMountRoot(mountRoot),
+		fsClient:    fsClient,
+		mountRoot:   cleanMountRoot(mountRoot),
+		gitBranches: gitBranches,
 	}
 }
 
@@ -90,6 +93,7 @@ type FileInfoResp struct {
 	CreatorUIN  string `json:"creator_uin,omitempty"`
 	NodeType    string `json:"node_type,omitempty"`
 	IsGitFolder bool   `json:"is_git_folder"`
+	GitBranch   string `json:"git_branch,omitempty"`
 	InRecycle   bool   `json:"in_recycle,omitempty"`
 	OriginPath  string `json:"origin_path,omitempty"`
 	FileID      string `json:"file_id,omitempty"`
@@ -101,17 +105,25 @@ func mapFileInfo(info domainfs.FileInfo, mountRoot string) FileInfoResp {
 		Name: resp.Name, Path: resp.Path, IsDir: resp.IsDir, Size: resp.Size,
 		ModifyTime: resp.ModifyTime, InodeID: resp.InodeID, OwnerUIN: resp.OwnerUIN,
 		CreatorUIN: resp.CreatorUIN, NodeType: resp.NodeType, IsGitFolder: resp.IsGitFolder,
+		GitBranch: resp.GitBranch,
 		InRecycle: info.InRecycle, OriginPath: toUserRelativePath(info.OriginPath),
 		FileID: resp.FileID,
 	}
 }
 
+// resolveFileID returns JuiceFS inode_id as a decimal string for API consumers.
+// Full path remains in the "path" field. Future ide_code_file.code_file_id (UUID)
+// may replace inode for business objects.
+func resolveFileID(info domainfs.FileInfo) string {
+	if info.InodeID == 0 {
+		return ""
+	}
+	return strconv.FormatUint(info.InodeID, 10)
+}
+
 func mapFolderNode(info domainfs.FileInfo, mountRoot string) FolderNodeResp {
 	rel := relPathFromMount(info.Path, mountRoot)
-	fileID := rel
-	if info.IsGitFolder {
-		fileID = encodePathFileID(rel)
-	}
+	fileID := resolveFileID(info)
 	return FolderNodeResp{
 		Name: info.Name, Path: rel, IsDir: info.IsDir, Size: info.Size,
 		ModifyTime: info.ModifyTime.UTC().Format(time.RFC3339),

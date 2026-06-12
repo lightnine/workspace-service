@@ -32,7 +32,7 @@ type FileInfo struct {
 	InodeID    uint64
 	OwnerUIN   string
 	CreatorUIN  string
-	NodeType    string // file | directory | git_folder | notebook (from file_node when known)
+	NodeType    string // file | directory | git_folder | notebook (from ws_file_node when known)
 	IsGitFolder bool
 	InRecycle  bool
 	OriginPath string // set for recycle-bin entries

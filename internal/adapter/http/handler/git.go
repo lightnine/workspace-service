@@ -311,6 +311,27 @@ func (h *GitHandler) GetStatus(c *gin.Context) {
 	httpresponse.OK(c, output)
 }
 
+func (h *GitHandler) GetFileDiff(c *gin.Context) {
+	var body req.GetFileDiffReq
+	if !bindGitJSON(c, &body) {
+		return
+	}
+	rc, ok := bindWorkspaceContext(c, &body.WorkspaceContext)
+	if !ok {
+		return
+	}
+	output, err := h.commandService.GetFileDiff(c.Request.Context(), usecasegit.FileDiffReq{
+		Context: rc,
+		Path:    body.Path,
+		File:    body.File,
+	})
+	if err != nil {
+		writeGitError(c, err)
+		return
+	}
+	httpresponse.OK(c, output)
+}
+
 func (h *GitHandler) GetCommitHistory(c *gin.Context) {
 	var body req.GetCommitHistoryReq
 	if !bindGitJSON(c, &body) {

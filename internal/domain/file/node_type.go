@@ -2,7 +2,7 @@ package file
 
 import "strings"
 
-// Node types stored in file_node.node_type (aligned with wedata FileType where applicable).
+// Node types stored in ws_file_node.node_type (aligned with wedata FileType where applicable).
 const (
 	NodeTypeFile      = "file"
 	NodeTypeDirectory = "directory"
@@ -34,7 +34,7 @@ func NodeTypeFromDir(isDir bool) string {
 	return NodeTypeFile
 }
 
-// InferNodeTypeFromName guesses node type from basename when file_node has no row.
+// InferNodeTypeFromName guesses node type from basename when ws_file_node has no row.
 func InferNodeTypeFromName(name string, isDir bool) string {
 	if isDir {
 		return NodeTypeDirectory

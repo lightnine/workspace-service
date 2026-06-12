@@ -118,7 +118,12 @@ func (s *Service) GetGitFolderStatus(ctx context.Context, input GetGitFolderStat
 		return GetGitFolderStatusResp{Status: GitFolderStatusUnspecified, Path: relPath}, nil
 	}
 	if _, err := s.gitClient.Status(ctx, domaingit.StatusReq{Actor: ident, Path: absPath}); err == nil {
-		return GetGitFolderStatusResp{Status: GitFolderStatusReady, Path: relPath}, nil
+		resp := GetGitFolderStatusResp{Status: GitFolderStatusReady, Path: relPath}
+		if info, err := s.gitClient.RepoInfo(ctx, domaingit.RepoInfoReq{Actor: ident, Path: absPath}); err == nil {
+			resp.Branch = info.CurrentBranch
+			resp.RepoURL = info.RemoteURL
+		}
+		return resp, nil
 	}
 	return GetGitFolderStatusResp{Status: GitFolderStatusUnspecified, Path: relPath}, nil
 }

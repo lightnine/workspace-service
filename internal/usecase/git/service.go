@@ -32,6 +32,7 @@ type CommandService interface {
 	CheckoutBranch(ctx context.Context, req CheckoutBranchReq) (BranchResp, error)
 	ListBranches(ctx context.Context, req ListBranchesReq) (ListBranchesResp, error)
 	GetStatus(ctx context.Context, req StatusReq) (StatusResp, error)
+	GetFileDiff(ctx context.Context, req FileDiffReq) (FileDiffResp, error)
 	GetCommitHistory(ctx context.Context, req CommitHistoryReq) (CommitHistoryResp, error)
 	DiscardChanges(ctx context.Context, req DiscardChangesReq) error
 	DeleteRepository(ctx context.Context, req DeleteRepositoryReq) error
@@ -146,6 +147,19 @@ func (s *Service) resolveAbsPath(ctx identity.RequestContext, relPath string, wr
 		return "", fmt.Errorf("%w: path escapes workspace mount root", wrap)
 	}
 	return abs, nil
+}
+
+// LookupGitBranch implements fs.GitBranchLookup for ListFiles enrichment.
+func (s *Service) LookupGitBranch(ctx context.Context, ident identity.RequestContext, relPath string) (string, error) {
+	actor, path, err := s.resolveActorAndPath(ident, relPath)
+	if err != nil {
+		return "", err
+	}
+	result, err := s.gitClient.ListBranches(ctx, domaingit.ListBranchesReq{Actor: actor, Path: path})
+	if err != nil {
+		return "", err
+	}
+	return result.CurrentBranch, nil
 }
 
 func cleanMountRoot(mountRoot string) string {

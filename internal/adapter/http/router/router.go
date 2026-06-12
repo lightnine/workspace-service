@@ -76,6 +76,7 @@ func registerGitRoutes(engine *gin.Engine, urlPrefix string, h *apphandler.GitHa
 	engine.POST(joinRoute(urlPrefix, "/CheckoutBranch"), h.CheckoutBranch)
 	engine.POST(joinRoute(urlPrefix, "/ListBranches"), h.ListBranches)
 	engine.POST(joinRoute(urlPrefix, "/GetStatus"), h.GetStatus)
+	engine.POST(joinRoute(urlPrefix, "/GetFileDiff"), h.GetFileDiff)
 	engine.POST(joinRoute(urlPrefix, "/GetCommitHistory"), h.GetCommitHistory)
 	engine.POST(joinRoute(urlPrefix, "/DiscardChanges"), h.DiscardChanges)
 	engine.POST(joinRoute(urlPrefix, "/DeleteRepo"), h.DeleteRepo)

@@ -30,7 +30,7 @@ curl -sf -X POST "$BASE_WS/CreateFile" -H "Content-Type: application/json" \
   -d "${CTX},\"path\":\"smoke/t.txt\",\"content_base64\":\"dGVzdA==\"}" >/dev/null
 echo "CreateFile OK"
 curl -sf -X POST "$BASE_WS/CreateNotebook" -H "Content-Type: application/json" \
-  -d "${CTX},\"path\":\"smoke/demo\"}" | python3 -m json.tool | head -8
+  -d "${CTX},\"path\":\"smoke/demo-nb\"}" | python3 -m json.tool | head -8
 echo "CreateNotebook OK"
 curl -sf -X POST "$BASE_WS/ValidatePath" -H "Content-Type: application/json" \
   -d "${CTX},\"parent_path\":\"smoke\",\"name\":\"t.txt\"}" | python3 -m json.tool | head -3

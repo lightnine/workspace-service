@@ -11,6 +11,7 @@ import (
 	domainfile "git.woa.com/leondli/workspace-service/internal/domain/file"
 	domainfs "git.woa.com/leondli/workspace-service/internal/domain/fs"
 	"git.woa.com/leondli/workspace-service/internal/domain/notebook"
+	"git.woa.com/leondli/workspace-service/pkg/ctxmeta"
 )
 
 const maxInlineReadSize = 32 * 1024 * 1024 // 32 MiB
@@ -30,7 +31,7 @@ func (c *WorkspaceFSClient) CreateFolder(ctx context.Context, req domainfs.Creat
 		return domainfs.FileInfo{}, fmt.Errorf("create folder: %w", err)
 	}
 	RecordInode(ctx, c.store, req.Actor, req.Path, domainfile.NodeTypeDirectory)
-	return c.buildFileInfo(req.Path)
+	return c.buildEnrichedFileInfo(ctx, req.Actor, req.Path)
 }
 
 func (c *WorkspaceFSClient) CreateFile(ctx context.Context, req domainfs.CreateFileReq) (domainfs.FileInfo, error) {
@@ -53,20 +54,23 @@ func (c *WorkspaceFSClient) CreateFile(ctx context.Context, req domainfs.CreateF
 		return domainfs.FileInfo{}, fmt.Errorf("write file: %w", err)
 	}
 	recordUpsert(ctx, c.store, req.Actor, req.Path)
-	return c.buildFileInfo(req.Path)
+	return c.buildEnrichedFileInfo(ctx, req.Actor, req.Path)
 }
 
 func (c *WorkspaceFSClient) CreateNotebook(ctx context.Context, req domainfs.CreateNotebookReq) (domainfs.FileInfo, error) {
 	content := notebook.DefaultNotebook(req.KernelName)
-	info, err := c.CreateFile(ctx, domainfs.CreateFileReq{
+	if _, err := c.CreateFile(ctx, domainfs.CreateFileReq{
 		Actor: req.Actor, Path: req.Path, Content: content, Overwrite: req.Overwrite,
-	})
-	if err != nil {
+	}); err != nil {
 		return domainfs.FileInfo{}, err
 	}
 	RecordInode(ctx, c.store, req.Actor, req.Path, domainfile.NodeTypeNotebook)
+	info, err := c.buildEnrichedFileInfo(ctx, req.Actor, req.Path)
+	if err != nil {
+		return domainfs.FileInfo{}, err
+	}
 	info.NodeType = domainfile.NodeTypeNotebook
-	return c.enrichFileInfo(ctx, req.Actor, info), nil
+	return info, nil
 }
 
 func (c *WorkspaceFSClient) DeletePath(ctx context.Context, req domainfs.DeletePathReq) error {
@@ -148,7 +152,7 @@ func (c *WorkspaceFSClient) renameOrMove(ctx context.Context, actor domainfs.Act
 	}
 
 	if samePath(src, dest) {
-		return c.buildFileInfo(src)
+		return c.buildEnrichedFileInfo(ctx, actor, src)
 	}
 
 	if destInfo, err := os.Stat(dest); err == nil {
@@ -175,7 +179,7 @@ func (c *WorkspaceFSClient) renameOrMove(ctx context.Context, actor domainfs.Act
 		return domainfs.FileInfo{}, fmt.Errorf("move: %w", err)
 	}
 	recordUpsert(ctx, c.store, actor, dest)
-	return c.buildFileInfo(dest)
+	return c.buildEnrichedFileInfo(ctx, actor, dest)
 }
 
 func (c *WorkspaceFSClient) CopyPath(ctx context.Context, req domainfs.CopyPathReq) (domainfs.FileInfo, error) {
@@ -210,7 +214,7 @@ func (c *WorkspaceFSClient) CopyPath(ctx context.Context, req domainfs.CopyPathR
 		}
 	}
 	recordUpsert(ctx, c.store, req.Actor, req.DestPath)
-	return c.buildFileInfo(req.DestPath)
+	return c.buildEnrichedFileInfo(ctx, req.Actor, req.DestPath)
 }
 
 func (c *WorkspaceFSClient) ListFiles(ctx context.Context, req domainfs.ListFilesReq) (domainfs.ListFilesResult, error) {
@@ -265,13 +269,14 @@ func (c *WorkspaceFSClient) ListFiles(ctx context.Context, req domainfs.ListFile
 	return domainfs.ListFilesResult{Files: files}, nil
 }
 
-func (c *WorkspaceFSClient) GetFileInfo(_ context.Context, absPath string) (domainfs.FileInfo, error) {
+func (c *WorkspaceFSClient) GetFileInfo(ctx context.Context, absPath string) (domainfs.FileInfo, error) {
 	if _, err := os.Stat(absPath); os.IsNotExist(err) {
 		return domainfs.FileInfo{}, domainfs.ErrNotFound
 	} else if err != nil {
 		return domainfs.FileInfo{}, err
 	}
-	return c.buildFileInfo(absPath)
+	actor, _ := ctxmeta.RequestContextFrom(ctx)
+	return c.buildEnrichedFileInfo(ctx, actor, absPath)
 }
 
 func (c *WorkspaceFSClient) ReadFile(ctx context.Context, req domainfs.ReadFileReq) (domainfs.ReadFileResult, error) {
@@ -294,7 +299,7 @@ func (c *WorkspaceFSClient) ReadFile(ctx context.Context, req domainfs.ReadFileR
 		return domainfs.ReadFileResult{}, err
 	}
 
-	fi, err := c.buildFileInfo(req.Path)
+	fi, err := c.buildEnrichedFileInfo(ctx, req.Actor, req.Path)
 	if err != nil {
 		return domainfs.ReadFileResult{}, err
 	}
@@ -403,11 +408,7 @@ func (c *WorkspaceFSClient) RestorePath(ctx context.Context, req domainfs.Restor
 	}
 	_ = c.removeTrashMeta(req.Actor, entryName)
 	recordUpsert(ctx, c.store, req.Actor, destAbs)
-	fi, err := c.buildFileInfo(destAbs)
-	if err != nil {
-		return domainfs.FileInfo{}, err
-	}
-	return c.enrichFileInfo(ctx, req.Actor, fi), nil
+	return c.buildEnrichedFileInfo(ctx, req.Actor, destAbs)
 }
 
 func (c *WorkspaceFSClient) EmptyRecycleBin(ctx context.Context, req domainfs.EmptyRecycleBinReq) error {
@@ -453,13 +454,25 @@ func (c *WorkspaceFSClient) buildFileInfo(absPath string) (domainfs.FileInfo, er
 	if err != nil {
 		return domainfs.FileInfo{}, err
 	}
-	return domainfs.FileInfo{
+	fi := domainfs.FileInfo{
 		Name:       info.Name(),
 		Path:       absPath,
 		IsDir:      info.IsDir(),
 		Size:       info.Size(),
 		ModifyTime: info.ModTime(),
-	}, nil
+	}
+	if inodeID, ok := inodeFromFileInfo(info); ok {
+		fi.InodeID = inodeID
+	}
+	return fi, nil
+}
+
+func (c *WorkspaceFSClient) buildEnrichedFileInfo(ctx context.Context, actor domainfs.Actor, absPath string) (domainfs.FileInfo, error) {
+	fi, err := c.buildFileInfo(absPath)
+	if err != nil {
+		return domainfs.FileInfo{}, err
+	}
+	return c.enrichFileInfo(ctx, actor, fi), nil
 }
 
 func copyFile(src, dst string) error {

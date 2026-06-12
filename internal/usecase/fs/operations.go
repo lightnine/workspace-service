@@ -259,6 +259,7 @@ func (s *Service) ListFiles(ctx context.Context, input ListFilesReq) (ListFilesR
 	for _, f := range result.Files {
 		resp.Files = append(resp.Files, mapFileInfo(f, s.mountRoot))
 	}
+	resp.Files = s.enrichGitBranches(ctx, input.Context.Normalize(), resp.Files)
 	return resp, nil
 }
 

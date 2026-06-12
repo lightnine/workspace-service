@@ -19,11 +19,11 @@ type KernelSessionStore struct {
 
 type KernelSession struct {
 	ID          uint64          `gorm:"column:id;primaryKey;autoIncrement"`
-	SessionID   string          `gorm:"column:session_id;uniqueIndex:uk_kernel_session_session_id"`
+	SessionID   string          `gorm:"column:session_id;uniqueIndex:uk_ws_kernel_session_session_id"`
 	Path        string          `gorm:"column:path"`
 	Name        string          `gorm:"column:name"`
 	Type        string          `gorm:"column:type"`
-	KernelID    string          `gorm:"column:kernel_id;index:idx_kernel_session_kernel_id"`
+	KernelID    string          `gorm:"column:kernel_id;index:idx_ws_kernel_session_kernel_id"`
 	KernelName  string          `gorm:"column:kernel_name"`
 	Cluster     string          `gorm:"column:cluster"`
 	CustomEnvs  json.RawMessage `gorm:"column:custom_envs"`
@@ -35,11 +35,11 @@ type KernelSession struct {
 	WorkspaceID string          `gorm:"column:workspace_id"`
 	CreatedAt   time.Time       `gorm:"column:created_at"`
 	UpdatedAt   time.Time       `gorm:"column:updated_at"`
-	DeletedAt   gorm.DeletedAt  `gorm:"column:deleted_at;index:idx_kernel_session_deleted_at"`
+	DeletedAt   gorm.DeletedAt  `gorm:"column:deleted_at;index:idx_ws_kernel_session_deleted_at"`
 }
 
 func (KernelSession) TableName() string {
-	return "kernel_session"
+	return "ws_kernel_session"
 }
 
 func NewOptionalKernelSessionStore(cfg appconfig.MySQLConfig) (domainsession.Store, error) {
