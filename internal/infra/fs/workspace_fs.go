@@ -26,14 +26,19 @@ func NewWorkspaceFSClient(store domainfile.NodeStore, mountRoot string) *Workspa
 	return &WorkspaceFSClient{store: store, mountRoot: cleanMountRoot(mountRoot)}
 }
 
+// CreateFolder creates a directory on the mount. ws_file_node recording is
+// orchestrated by the usecase layer (write-ahead), so this stays pure storage.
 func (c *WorkspaceFSClient) CreateFolder(ctx context.Context, req domainfs.CreateFolderReq) (domainfs.FileInfo, error) {
 	if err := os.MkdirAll(req.Path, 0o755); err != nil {
 		return domainfs.FileInfo{}, fmt.Errorf("create folder: %w", err)
 	}
-	RecordInode(ctx, c.store, req.Actor, req.Path, domainfile.NodeTypeDirectory)
 	return c.buildEnrichedFileInfo(ctx, req.Actor, req.Path)
 }
 
+// CreateFile writes a file on the mount atomically (temp file + rename) so that
+// a crash never leaves a partially written file: a path that exists is always a
+// complete file, which the recovery scan relies on. ws_file_node recording is
+// orchestrated by the usecase layer.
 func (c *WorkspaceFSClient) CreateFile(ctx context.Context, req domainfs.CreateFileReq) (domainfs.FileInfo, error) {
 	if err := os.MkdirAll(filepath.Dir(req.Path), 0o755); err != nil {
 		return domainfs.FileInfo{}, fmt.Errorf("create parent dir: %w", err)
@@ -50,13 +55,14 @@ func (c *WorkspaceFSClient) CreateFile(ctx context.Context, req domainfs.CreateF
 		return domainfs.FileInfo{}, err
 	}
 
-	if err := os.WriteFile(req.Path, req.Content, 0o644); err != nil {
+	if err := atomicWriteFile(req.Path, req.Content); err != nil {
 		return domainfs.FileInfo{}, fmt.Errorf("write file: %w", err)
 	}
-	recordUpsert(ctx, c.store, req.Actor, req.Path)
 	return c.buildEnrichedFileInfo(ctx, req.Actor, req.Path)
 }
 
+// CreateNotebook materializes a default notebook document. ws_file_node
+// recording (node_type=notebook) is orchestrated by the usecase layer.
 func (c *WorkspaceFSClient) CreateNotebook(ctx context.Context, req domainfs.CreateNotebookReq) (domainfs.FileInfo, error) {
 	content := notebook.DefaultNotebook(req.KernelName)
 	if _, err := c.CreateFile(ctx, domainfs.CreateFileReq{
@@ -64,7 +70,6 @@ func (c *WorkspaceFSClient) CreateNotebook(ctx context.Context, req domainfs.Cre
 	}); err != nil {
 		return domainfs.FileInfo{}, err
 	}
-	RecordInode(ctx, c.store, req.Actor, req.Path, domainfile.NodeTypeNotebook)
 	info, err := c.buildEnrichedFileInfo(ctx, req.Actor, req.Path)
 	if err != nil {
 		return domainfs.FileInfo{}, err
@@ -473,6 +478,43 @@ func (c *WorkspaceFSClient) buildEnrichedFileInfo(ctx context.Context, actor dom
 		return domainfs.FileInfo{}, err
 	}
 	return c.enrichFileInfo(ctx, actor, fi), nil
+}
+
+// atomicWriteFile writes content to a temp file in the same directory, flushes
+// it, then renames it onto dst. Rename is atomic on a single filesystem, so an
+// observer (including the crash-recovery scan) never sees a partial dst.
+func atomicWriteFile(dst string, content []byte) error {
+	dir := filepath.Dir(dst)
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(dst)+".wstmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	cleanup := func() {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+	}
+	if _, err := tmp.Write(content); err != nil {
+		cleanup()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		cleanup()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := os.Chmod(tmpName, 0o644); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := os.Rename(tmpName, dst); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	return nil
 }
 
 func copyFile(src, dst string) error {

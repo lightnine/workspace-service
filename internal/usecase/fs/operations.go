@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	domainfile "git.woa.com/leondli/workspace-service/internal/domain/file"
 	domainfs "git.woa.com/leondli/workspace-service/internal/domain/fs"
 	"git.woa.com/leondli/workspace-service/internal/domain/identity"
 )
@@ -109,7 +110,10 @@ func (s *Service) CreateFolder(ctx context.Context, input CreateFolderReq) (File
 	if err != nil {
 		return FileInfoResp{}, err
 	}
-	info, err := s.fsClient.CreateFolder(ctx, domainfs.CreateFolderReq{Actor: actor, Path: abs})
+	info, err := s.recorder.run(ctx, domainfile.IntentOpCreateFolder, abs, actor, domainfile.NodeTypeDirectory,
+		func() (domainfs.FileInfo, error) {
+			return s.fsClient.CreateFolder(ctx, domainfs.CreateFolderReq{Actor: actor, Path: abs})
+		})
 	if err != nil {
 		return FileInfoResp{}, fmt.Errorf("create folder: %w", err)
 	}
@@ -125,9 +129,12 @@ func (s *Service) CreateFile(ctx context.Context, input CreateFileReq) (FileInfo
 	if err != nil {
 		return FileInfoResp{}, fmt.Errorf("%w: invalid content_base64", ErrInvalidFileRequest)
 	}
-	info, err := s.fsClient.CreateFile(ctx, domainfs.CreateFileReq{
-		Actor: actor, Path: abs, Content: content, Overwrite: input.Overwrite,
-	})
+	info, err := s.recorder.run(ctx, domainfile.IntentOpCreateFile, abs, actor, domainfile.NodeTypeFile,
+		func() (domainfs.FileInfo, error) {
+			return s.fsClient.CreateFile(ctx, domainfs.CreateFileReq{
+				Actor: actor, Path: abs, Content: content, Overwrite: input.Overwrite,
+			})
+		})
 	if err != nil {
 		return FileInfoResp{}, fmt.Errorf("create file: %w", err)
 	}
@@ -143,9 +150,12 @@ func (s *Service) CreateNotebook(ctx context.Context, input CreateNotebookReq) (
 	if err != nil {
 		return FileInfoResp{}, err
 	}
-	info, err := s.fsClient.CreateNotebook(ctx, domainfs.CreateNotebookReq{
-		Actor: actor, Path: abs, KernelName: input.KernelName, Overwrite: input.Overwrite,
-	})
+	info, err := s.recorder.run(ctx, domainfile.IntentOpCreateNotebook, abs, actor, domainfile.NodeTypeNotebook,
+		func() (domainfs.FileInfo, error) {
+			return s.fsClient.CreateNotebook(ctx, domainfs.CreateNotebookReq{
+				Actor: actor, Path: abs, KernelName: input.KernelName, Overwrite: input.Overwrite,
+			})
+		})
 	if err != nil {
 		return FileInfoResp{}, fmt.Errorf("create notebook: %w", err)
 	}
@@ -300,9 +310,12 @@ func (s *Service) WriteFile(ctx context.Context, input WriteFileReq) (FileInfoRe
 	if err != nil {
 		return FileInfoResp{}, fmt.Errorf("%w: invalid content_base64", ErrInvalidFileRequest)
 	}
-	info, err := s.fsClient.WriteFile(ctx, domainfs.WriteFileReq{
-		Actor: actor, Path: abs, Content: content, Overwrite: input.Overwrite,
-	})
+	info, err := s.recorder.run(ctx, domainfile.IntentOpWriteFile, abs, actor, domainfile.NodeTypeFile,
+		func() (domainfs.FileInfo, error) {
+			return s.fsClient.WriteFile(ctx, domainfs.WriteFileReq{
+				Actor: actor, Path: abs, Content: content, Overwrite: input.Overwrite,
+			})
+		})
 	if err != nil {
 		return FileInfoResp{}, fmt.Errorf("write file: %w", err)
 	}

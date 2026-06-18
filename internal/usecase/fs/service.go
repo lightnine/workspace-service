@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	domainfile "git.woa.com/leondli/workspace-service/internal/domain/file"
 	domainfs "git.woa.com/leondli/workspace-service/internal/domain/fs"
 	"git.woa.com/leondli/workspace-service/internal/domain/identity"
 )
@@ -37,16 +38,32 @@ type FileService interface {
 }
 
 type Service struct {
-	fsClient     domainfs.WorkspaceFS
-	mountRoot    string
-	gitBranches  GitBranchLookup
+	fsClient    domainfs.WorkspaceFS
+	mountRoot   string
+	gitBranches GitBranchLookup
+	recorder    *nodeRecorder
 }
 
 func NewService(fsClient domainfs.WorkspaceFS, mountRoot string, gitBranches GitBranchLookup) *Service {
+	return NewServiceWithStores(fsClient, mountRoot, gitBranches, nil, nil)
+}
+
+// NewServiceWithStores builds a Service that orchestrates the storage write and
+// the ws_file_node metadata write itself, using a write-ahead intent for crash
+// recovery. nodes and intents may be nil (MySQL disabled), in which case the
+// service degrades to a plain storage write without metadata recording.
+func NewServiceWithStores(
+	fsClient domainfs.WorkspaceFS,
+	mountRoot string,
+	gitBranches GitBranchLookup,
+	nodes domainfile.NodeStore,
+	intents domainfile.IntentStore,
+) *Service {
 	return &Service{
 		fsClient:    fsClient,
 		mountRoot:   cleanMountRoot(mountRoot),
 		gitBranches: gitBranches,
+		recorder:    newNodeRecorder(nodes, intents),
 	}
 }
 

@@ -53,13 +53,34 @@ func main() {
 		log.Warn("mysql dsn is empty, ws_file_node recording is disabled")
 	}
 
+	fileIntentStore, err := inframysql.NewOptionalFileIntentStore(cfg.MySQL)
+	if err != nil {
+		log.Fatal("init file intent store failed", zap.Error(err))
+	}
+	if fileIntentStore == nil {
+		log.Warn("mysql dsn is empty, write-ahead file intent journal is disabled")
+	}
+
 	mountRoot := usecasegit.CleanMountRoot(cfg.Workspace.MountRoot)
 	workspaceFSClient := infrafs.NewWorkspaceFSClient(fileNodeStore, mountRoot)
 	gitMetaRoot := usecasegit.CleanMountRoot(cfg.Workspace.GitMetaRoot)
 	workspaceGitClient := infragit.NewWorkspaceGitClient(fileNodeStore, mountRoot, gitMetaRoot)
 	gitService := usecasegit.NewService(workspaceGitClient, mountRoot, fileNodeStore)
-	fileService := usecasefs.NewService(workspaceFSClient, mountRoot, gitService)
+	fileService := usecasefs.NewServiceWithStores(workspaceFSClient, mountRoot, gitService, fileNodeStore, fileIntentStore)
 	fileHandler := apphandler.NewFileHandler(fileService)
+
+	// Reconcile any write-ahead intents left pending by a previous crash before
+	// serving traffic: existing files get their ws_file_node row restored, and
+	// intents whose storage write never landed are aborted.
+	if recoverer := usecasefs.NewRecoverer(fileIntentStore, fileNodeStore, infrafs.NewInodeInspector(), log); recoverer != nil {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			if _, recErr := recoverer.Recover(ctx); recErr != nil {
+				log.Error("file intent recovery failed", zap.Error(recErr))
+			}
+		}()
+	}
 	if gitMetaRoot != "" {
 		log.Info("git metadata stored outside workspace mount", zap.String("git_meta_root", gitMetaRoot))
 	}
